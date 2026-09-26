@@ -25,13 +25,13 @@ Budget ~7h solo. Each milestone ends deployable. Times are targets, not limits.
 
 ## M3 · Review gate (3:30–4:15)
 - [ ] Review screen: variants grouped by channel × language, the 3 image prompts side by side, critic score and flagged phrases
-- [ ] Approve (records approver, time, contentHash) · Edit (clears approval) · Discard + note → regenerate that variant with the note → new version
+- [x] Approve (records approver, time, contentHash) · Edit (clears approval) · Discard + note → regenerate that variant with the note → new version
 
 ## M4 · Publisher (4:15–5:00)
-- [ ] Specs + byte-level `validate()` + 3 mock adapters + tests using fixtures (good and bad for each rule)
-- [ ] Schedule approved variants (datetime); scheduler tick on page load + "⏩ advance clock" demo control
-- [ ] Publish → adapter → `published` with externalId, or `rejected` with typed reasons; every attempt logged
-- [ ] "Rule-breaker" demo panel: submit oversized / wrong-ratio / 300-char-X post and show the rejection
+- [x] Specs + byte-level `validate()` + 3 mock adapters + tests using fixtures (good and bad for each rule)
+- [ ] Schedule approved variants (datetime); scheduler tick on page load + "⏩ advance clock" demo control — lib done (`scheduleVariant`, `runSchedulerTick`, `advanceClock("+6h"|"+1d"|"+7d")` ticks); /queue UI wiring pending
+- [x] Publish → adapter → `published` with externalId, or `rejected` with typed reasons; every attempt logged
+- [ ] "Rule-breaker" demo panel: submit oversized / wrong-ratio / 300-char-X post and show the rejection — lib done (`submitRuleBreaker`, real bytes); panel UI pending
 
 ## M5 · Analytics store + comparison (5:00–6:00)
 - [ ] Simulator emits platform-native metric payloads for published posts → `ingest` normalises into `metrics`
