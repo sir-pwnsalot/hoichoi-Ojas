@@ -49,6 +49,9 @@ function providerChainFor(purpose: LlmPurpose): ProviderName[] {
     case "plan":
     case "insight_extraction":
       return premium ? ["groq", "gemini", "openrouter_premium"] : ["groq", "gemini", "openrouter_free"];
+    case "report":
+      // English-only analytics JSON, so Groq is a fine fallback here.
+      return premium ? ["gemini", "groq", "openrouter_premium"] : ["gemini", "groq", "openrouter_free"];
     default:
       return premium ? ["gemini", "openrouter_premium"] : ["gemini", "openrouter_free"];
   }
@@ -209,6 +212,9 @@ async function callOpenAiCompatible(
         { role: "user", content: args.user },
       ],
       temperature: args.temperature,
+      // Reasoning models spend ~3k tokens thinking; the default cap truncated
+      // larger JSON (the weekly report) mid-object.
+      max_tokens: 8192,
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }));

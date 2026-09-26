@@ -207,3 +207,28 @@ Done:
 Needs (Claude Code):
 - [ ] Fix TS errors in `src/lib/report/verify.ts` and `tests/report/verify.test.ts` (Cannot find module `'./generate'`).
 - [ ] Connect `generateWeeklyReport` and `listInsights` properly to backend logic, as they currently use M0 stubs.
+
+## Claude Code — M6 session (report + loop)
+Done (112 tests green, typecheck clean):
+- `src/lib/report/facts.ts` (week facts in code: per-post rates in %, pre-computed aggregates keyed e.g. `bnLift.instagram`,
+  `er.cta.question`, `er.time.evening`) · `generate.ts` (JSON claims + insights, regenerate once with verifier errors, then drop
+  failures → `verified=false` + `unverifiedReasons`) · `verify.ts` (deterministic; tests: no citation, unknown ID, outside week,
+  wrong number, unbacked %) · `insights.ts` (save report + cards; newest report's cards active, older ones deactivated).
+- Actions real: `generateWeeklyReport(weekStart?)` (default = 7 days ending at app clock; throws if the week has no posts),
+  `getLatestReport()`, `listInsights(activeOnly)`, `toggleInsight(id, active)`. Live-tested via Groq: 9/9 claims verified.
+- `Report` gained optional `weekEnd`, `unverifiedReasons`, `insights`; `ReportClaim` gained `section`, `figures`.
+  `claims` only ever holds verified claims. `statement` has inline `[P-1234]` → render as chips.
+- Loop: selected cards injected into the plan prompt as constraints; unknown insightIds from the model are filtered;
+  `generateCampaign()` now returns `appliedInsights[{insightId, howApplied, statement, lever}]`; brief stores the applied ids.
+- Seed: `npm run db:seed` adds verified `seed-report-1` + 4 active cards (`seed-ins-lang|cta|channel|time`), built from facts
+  and checked by the same verifier.
+- llm.ts: `report` purpose falls back to Groq; OpenAI-compatible calls send `max_tokens: 8192` (gpt-oss truncated JSON).
+- Schema: `reports.unverified_reasons`. **Prod: `npm run db:push` against Turso, then `npx tsx --env-file=.env.local scripts/seed.ts`.**
+- Heads-up: Gemini free quota is exhausted today (429), so copy/critic calls will fail until it resets or `LLM_TIER=premium`.
+
+Needs (Antigravity):
+- [ ] src/app/report: `getLatestReport()` → sections by `claim.section`, `[P-xxxx]` → clickable chips (post card via `getVariant`);
+      show a verified badge, or "Unverified" + `unverifiedReasons`; "Generate this week" → `generateWeeklyReport()` (toast on error);
+      insight cards with an active toggle → `toggleInsight`.
+- [ ] src/app/studio: after `generateCampaign`, show `result.appliedInsights` ("Insight: <statement> → <howApplied>").
+      Pre-select up to 3 cards by lever match; show evidence chips on each card.

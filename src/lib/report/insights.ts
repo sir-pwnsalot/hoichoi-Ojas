@@ -43,7 +43,7 @@ export function renderMarkdown(r: {
   unverifiedReasons: string[];
   insights: Pick<InsightCard, "lever" | "statement" | "recommendation" | "evidencePostIds">[];
 }): string {
-  const lines = [`# Weekly report — week of ${r.weekStart.toISOString().slice(0, 10)}`, ""];
+  const lines = [`# Weekly report — week of ${new Date(r.weekStart.getTime() + 5.5 * 3600_000).toISOString().slice(0, 10)} (IST)`, ""];
   lines.push(r.verified ? "_All claims verified against the facts table._" : "_**Unverified:** some claims failed verification and were removed._");
   const sections = [...new Set(r.claims.map((c) => c.section ?? "Summary"))];
   for (const s of sections) {

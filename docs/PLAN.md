@@ -39,8 +39,8 @@ Budget ~7h solo. Each milestone ends deployable. Times are targets, not limits.
 - [x] Like-for-like view: per concept, the 3 platforms side by side on normalised rates; bn vs en on the same platform
 
 ## M6 · Report + loop (6:00–6:45)
-- [ ] `facts.ts` → `generate.ts` (JSON claims with postIds) → `verify.ts` (reject + regenerate once) → render with clickable post chips
-- [ ] Insight cards extracted from the report → shown in the brief form → injected into the plan prompt → the plan lists how each one was applied
+- [ ] `facts.ts` → `generate.ts` (JSON claims with postIds) → `verify.ts` (reject + regenerate once) → render with clickable post chips — lib done (`generateWeeklyReport`/`getLatestReport`, live-verified; seeded verified report); /report UI with chips pending
+- [ ] Insight cards extracted from the report → shown in the brief form → injected into the plan prompt → the plan lists how each one was applied — lib done (cards saved active, `listInsights`/`toggleInsight`, plan prompt injection, `GenerateCampaignResult.appliedInsights`); needs UI display + a live generate click-through
 
 ## M7 · Ship (6:45–7:30)
 - [ ] Pre-generated demo campaign seeded so the live link works with zero API calls; generation behind `DEMO_PASSCODE`
