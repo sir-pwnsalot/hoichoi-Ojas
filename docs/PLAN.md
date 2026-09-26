@@ -3,10 +3,10 @@
 Budget ~7h solo. Each milestone ends deployable. Times are targets, not limits.
 
 ## M0 · Skeleton + gate (0:00–0:45)
-- [ ] `create-next-app` into a temp subfolder (the root isn't empty, so it would refuse), then move everything up, keeping our .gitignore; shadcn init, Drizzle + libSQL, Vitest
-- [ ] `src/db/schema.ts` per docs/ARCHITECTURE.md; `db:push` works on local file
-- [ ] `lib/domain/status.ts` state machine + `approval.ts` (contentHash) + tests: illegal transitions throw; schedule without approval throws; edit after approval invalidates
-- [ ] `lib/ai/llm.ts` router skeleton + cost ledger + budget guard (see `ai-providers`)
+- [x] `create-next-app` into a temp subfolder (the root isn't empty, so it would refuse), then move everything up, keeping our .gitignore; shadcn init, Drizzle + libSQL, Vitest
+- [x] `src/db/schema.ts` per docs/ARCHITECTURE.md; `db:push` works on local file
+- [x] `lib/domain/status.ts` state machine + `approval.ts` (contentHash) + tests: illegal transitions throw; schedule without approval throws; edit after approval invalidates
+- [x] `lib/ai/llm.ts` router skeleton + cost ledger + budget guard (see `ai-providers`)
 - [ ] Deploy empty app to Vercel with Turso + Blob env vars ✅ live URL
 
 ## M1 · Brief → tailored copy (0:45–2:15)
