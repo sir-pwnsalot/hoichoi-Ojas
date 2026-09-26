@@ -1,5 +1,6 @@
 "use server";
 
+import { requestTime } from "@/lib/request-time";
 import { randomUUID } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -138,6 +139,7 @@ export async function submitRuleBreaker(kind: RuleBreakerKind, payload?: RuleBre
 }
 
 export async function listPublishAttempts(variantId?: string): Promise<PublishAttempt[]> {
+  await requestTime();
   const q = db.select().from(publishAttempts);
   const rows = await (variantId ? q.where(eq(publishAttempts.variantId, variantId)) : q)
     .orderBy(desc(publishAttempts.attemptedAt))

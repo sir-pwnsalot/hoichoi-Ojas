@@ -232,3 +232,10 @@ Needs (Antigravity):
       insight cards with an active toggle → `toggleInsight`.
 - [ ] src/app/studio: after `generateCampaign`, show `result.appliedInsights` ("Insight: <statement> → <howApplied>").
       Pre-select up to 3 cards by lever match; show evidence chips on each card.
+
+## Claude Code — build fix (prerender)
+Done: Vercel build failed prerendering /analytics (DB read at build time). Read actions now call `requestTime()`
+(`next/server` `connection()`), so DB pages render per request; `next build` passes against an empty DB.
+Needs (Antigravity):
+- [ ] src/app/analytics/page.tsx + src/app/review/page.tsx: `listConcepts("brief-mock")` / `getComparison("brief-mock")`
+      match nothing — call with no briefId (all concepts) or a real one, or the pages stay empty.

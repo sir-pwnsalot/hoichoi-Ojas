@@ -1,5 +1,6 @@
 "use server";
 
+import { requestTime } from "@/lib/request-time";
 import * as domainClock from "@/lib/domain/clock";
 import { runSchedulerTick, type TickResult } from "@/lib/domain/scheduler";
 import type { ClockState } from "@/lib/types";
@@ -8,6 +9,7 @@ import type { ClockState } from "@/lib/types";
 // truth for "now" in the demo.
 
 export async function getClock(): Promise<ClockState> {
+  await requestTime();
   const offsetMs = await domainClock.getClockOffsetMs();
   return { offsetMs, now: new Date(Date.now() + offsetMs) };
 }

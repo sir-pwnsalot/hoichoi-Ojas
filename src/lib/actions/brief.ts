@@ -1,5 +1,6 @@
 "use server";
 
+import { requestTime } from "@/lib/request-time";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
@@ -199,6 +200,7 @@ export async function generateCampaign(briefId: string): Promise<GenerateCampaig
 }
 
 export async function listConcepts(briefId?: string): Promise<Concept[]> {
+  await requestTime();
   const q = db.select().from(concepts);
   const rows = briefId ? await q.where(eq(concepts.briefId, briefId)) : await q;
   return rows

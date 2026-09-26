@@ -1,5 +1,6 @@
 "use server";
 
+import { requestTime } from "@/lib/request-time";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
@@ -34,6 +35,7 @@ export interface ListVariantsFilter {
 }
 
 export async function listVariants(filter: ListVariantsFilter = {}): Promise<Variant[]> {
+  await requestTime();
   const conditions = [];
   if (filter.conceptId) conditions.push(eq(variantsTable.conceptId, filter.conceptId));
   if (filter.channel) conditions.push(eq(variantsTable.channel, filter.channel));
@@ -73,6 +75,7 @@ async function withTailoring(rows: (typeof variantsTable.$inferSelect)[]): Promi
 }
 
 export async function getVariant(variantId: string): Promise<Variant | null> {
+  await requestTime();
   const rows = await db.select().from(variantsTable).where(eq(variantsTable.id, variantId)).limit(1);
   if (!rows[0]) return null;
   return (await withTailoring(rows))[0];
@@ -80,6 +83,7 @@ export async function getVariant(variantId: string): Promise<Variant | null> {
 
 // Latest active approval for a variant (review screen badge), or null.
 export async function getApproval(variantId: string): Promise<Approval | null> {
+  await requestTime();
   return activeApproval(variantId);
 }
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { requestTime } from "@/lib/request-time";
 import type { InsightCard, Report } from "@/lib/types";
 import { now } from "@/lib/domain/clock";
 import { loadWeekFacts, WEEK_MS } from "@/lib/report/facts";
@@ -19,10 +20,12 @@ export async function generateWeeklyReport(weekStart?: Date): Promise<Report> {
 }
 
 export async function getLatestReport(): Promise<Report | null> {
+  await requestTime();
   return latestReport();
 }
 
 export async function listInsights(activeOnly = true): Promise<InsightCard[]> {
+  await requestTime();
   return listInsightCards(activeOnly);
 }
 

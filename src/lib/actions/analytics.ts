@@ -1,5 +1,6 @@
 "use server";
 
+import { requestTime } from "@/lib/request-time";
 import type { ComparisonRow } from "@/lib/types";
 import { bnVsEn, compareConcepts, loadSnapshots, type LangSplitRow } from "@/lib/analytics/compare";
 
@@ -7,10 +8,12 @@ import { bnVsEn, compareConcepts, loadSnapshots, type LangSplitRow } from "@/lib
 // concept's common age since publish (ComparisonRow.ageHours). `atHours`
 // forces a specific capture point (1, 6, 24, 72, 168).
 export async function getComparison(briefId?: string, atHours?: number): Promise<ComparisonRow[]> {
+  await requestTime();
   return compareConcepts(await loadSnapshots(briefId), atHours);
 }
 
 // bn vs en on the same channel: per concept + an "All concepts" mean per channel (conceptId null).
 export async function getLangSplit(briefId?: string, atHours?: number): Promise<LangSplitRow[]> {
+  await requestTime();
   return bnVsEn(compareConcepts(await loadSnapshots(briefId), atHours));
 }
