@@ -3,6 +3,7 @@ import type { z } from "zod";
 import { db } from "@/db";
 import { aiCalls } from "@/db/schema";
 import type { SpendSummary } from "@/lib/types";
+import { estimateCostUsd } from "@/lib/ai/pricing";
 
 // Every AI call in this app goes through generateJSON() — never call a
 // provider SDK directly from a route or action. See skill `ai-providers`.
@@ -96,14 +97,140 @@ function stripCodeFences(text: string): string {
     .trim();
 }
 
-// TODO(M1): wire real provider calls (Gemini, Groq, OpenRouter) per
-// ai-providers skill. Throws so M0 callers fail loudly instead of the
-// router silently pretending to have called a model.
+export class ProviderHttpError extends Error {
+  constructor(
+    public readonly provider: ProviderName,
+    public readonly status: number,
+    body: string,
+  ) {
+    super(`${provider} returned HTTP ${status}: ${body.slice(0, 300)}`);
+    this.name = "ProviderHttpError";
+  }
+}
+
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env var "${name}" — set it in .env.local`);
+  return v;
+}
+
+// Rough fallback estimate (chars/4) for providers that omit usage in their
+// response; real usage from the API response is always preferred.
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+async function safeText(res: Response): Promise<string> {
+  try {
+    return await res.text();
+  } catch {
+    return "";
+  }
+}
+
+const REQUEST_TIMEOUT_MS = 20_000;
+
+async function callGemini(args: {
+  system: string;
+  user: string;
+  temperature: number;
+}): Promise<ProviderCallResult> {
+  const apiKey = requireEnv("GEMINI_API_KEY");
+  const model = requireEnv("GEMINI_MODEL_COPY");
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: args.system }] },
+        contents: [{ role: "user", parts: [{ text: args.user }] }],
+        generationConfig: {
+          temperature: args.temperature,
+          responseMimeType: "application/json",
+          // These are short structured-output calls (copy/critic/plan JSON),
+          // not open-ended reasoning — skip Gemini 3's thinking tokens so
+          // responses stay fast and parts never carry stray `thought` text.
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    },
+  );
+  if (!res.ok) throw new ProviderHttpError("gemini", res.status, await safeText(res));
+  const json = await res.json();
+  const raw: string =
+    json.candidates?.[0]?.content?.parts
+      ?.filter((p: { thought?: boolean }) => !p.thought)
+      .map((p: { text?: string }) => p.text ?? "")
+      .join("") ?? "";
+  const inTokens = json.usageMetadata?.promptTokenCount ?? estimateTokens(args.system + args.user);
+  const outTokens = json.usageMetadata?.candidatesTokenCount ?? estimateTokens(raw);
+  return { provider: "gemini", model, raw, inTokens, outTokens, costUsd: 0 };
+}
+
+async function callOpenAiCompatible(
+  provider: ProviderName,
+  baseUrl: string,
+  apiKeyEnv: string,
+  modelEnv: string,
+  args: { system: string; user: string; temperature: number },
+): Promise<ProviderCallResult> {
+  const apiKey = requireEnv(apiKeyEnv);
+  const model = requireEnv(modelEnv);
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: args.system },
+        { role: "user", content: args.user },
+      ],
+      temperature: args.temperature,
+    }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new ProviderHttpError(provider, res.status, await safeText(res));
+  const json = await res.json();
+  const raw: string = json.choices?.[0]?.message?.content ?? "";
+  const inTokens = json.usage?.prompt_tokens ?? estimateTokens(args.system + args.user);
+  const outTokens = json.usage?.completion_tokens ?? estimateTokens(raw);
+  return { provider, model, raw, inTokens, outTokens, costUsd: estimateCostUsd(provider, inTokens, outTokens) };
+}
+
+// Dispatches to the real provider APIs. Gemini uses its native REST API
+// (JSON mode via responseMimeType); Groq and OpenRouter are OpenAI-compatible
+// chat/completions endpoints. See skill `ai-providers`.
 async function callProvider(
   provider: ProviderName,
-  _args: { system: string; user: string; temperature: number },
+  args: { system: string; user: string; temperature: number },
 ): Promise<ProviderCallResult> {
-  throw new Error(`Provider "${provider}" is not wired up yet (M0 skeleton)`);
+  switch (provider) {
+    case "gemini":
+      return callGemini(args);
+    case "groq":
+      return callOpenAiCompatible("groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "GROQ_MODEL_FAST", args);
+    case "openrouter_free":
+      return callOpenAiCompatible(
+        "openrouter_free",
+        "https://openrouter.ai/api/v1",
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_MODEL_FALLBACK",
+        args,
+      );
+    case "openrouter_premium":
+      return callOpenAiCompatible(
+        "openrouter_premium",
+        "https://openrouter.ai/api/v1",
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_MODEL_PREMIUM",
+        args,
+      );
+  }
 }
 
 // Routes by `purpose`, walks the fallback chain on error, validates against
@@ -124,16 +251,23 @@ export async function generateJSON<T>(args: GenerateJSONArgs<T>): Promise<T> {
         await logAiCall({ ...result, purpose, ms: Date.now() - started, ok: true });
         return parsed.data;
       }
+      if (process.env.LLM_DEBUG) {
+        console.error(`[llm debug] ${provider} schema mismatch (attempt 1):`, parsed.error.message, "\nraw:", result.raw);
+      }
 
       const retryUser = `${user}\n\nYour previous response failed schema validation: ${parsed.error.message}\nReturn valid JSON matching the schema, nothing else.`;
       const retry = await callProvider(provider, { system, user: retryUser, temperature });
       const retryParsed = schema.safeParse(JSON.parse(stripCodeFences(retry.raw)));
       await logAiCall({ ...retry, purpose, ms: Date.now() - started, ok: retryParsed.success });
       if (retryParsed.success) return retryParsed.data;
+      if (process.env.LLM_DEBUG) {
+        console.error(`[llm debug] ${provider} schema mismatch (retry):`, retryParsed.error.message, "\nraw:", retry.raw);
+      }
       lastError = retryParsed.error;
     } catch (err) {
       if (err instanceof BudgetExceededError) throw err;
       lastError = err;
+      if (process.env.LLM_DEBUG) console.error(`[llm debug] ${provider} failed:`, err);
       await logAiCall({
         provider,
         model: "unknown",

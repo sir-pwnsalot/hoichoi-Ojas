@@ -1,13 +1,44 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { and, eq, inArray } from "drizzle-orm";
+import { db } from "@/db";
+import { concepts, variants as variantsTable } from "@/db/schema";
 import { transition, type VariantAction } from "@/lib/domain/status";
 import { computeContentHash } from "@/lib/domain/approval";
 import type { Approval, Channel, Lang, Variant, VariantStatus } from "@/lib/types";
 
-// M0 stub: returns realistic mock data with the final shape, and already
-// runs edits/approvals through the real domain gate (src/lib/domain) so the
-// UI team can build against true state-machine behavior. Wired to src/db in M1.
+// listVariants/getVariant are DB-backed (M1). approve/edit/discard/regenerate
+// stay M0 mock stubs — already run through the real domain gate so the UI
+// team can build against true state-machine behavior — pending M3 wiring.
+
+function rowToVariant(row: typeof variantsTable.$inferSelect): Variant {
+  return {
+    id: row.id,
+    conceptId: row.conceptId,
+    channel: row.channel as Channel,
+    lang: row.lang as Lang,
+    format: row.format as Variant["format"],
+    caption: row.caption,
+    hashtags: row.hashtags,
+    cta: row.cta,
+    hook: row.hook,
+    planJson: (row.planJson as unknown as Variant["planJson"]) ?? null,
+    imagePrompt: row.imagePrompt,
+    assetUrl: row.assetUrl,
+    assetSha256: row.assetSha256,
+    width: row.width,
+    height: row.height,
+    bytes: row.bytes,
+    durationSec: row.durationSec,
+    criticJson: (row.criticJson as unknown as Variant["criticJson"]) ?? null,
+    status: row.status as VariantStatus,
+    version: row.version,
+    parentId: row.parentId,
+    discardNote: row.discardNote,
+    createdAt: row.createdAt,
+  };
+}
 
 function mockVariant(overrides: Partial<Variant> = {}): Variant {
   const caption = overrides.caption ?? "আজ রাতে নতুন পর্ব — মিস করবেন না!";
@@ -49,23 +80,33 @@ export interface ListVariantsFilter {
 }
 
 export async function listVariants(filter: ListVariantsFilter = {}): Promise<Variant[]> {
-  const channels: Channel[] = filter.channel ? [filter.channel] : ["instagram", "x", "youtube"];
-  const langs: Lang[] = filter.lang ? [filter.lang] : ["bn", "en"];
-  return channels.flatMap((channel) =>
-    langs.map((lang) =>
-      mockVariant({
-        channel,
-        lang,
-        conceptId: filter.conceptId ?? "concept-mock",
-        status: filter.status ?? "draft",
-        format: channel === "youtube" ? "video" : "image",
-      }),
-    ),
-  );
+  const conditions = [];
+  if (filter.conceptId) conditions.push(eq(variantsTable.conceptId, filter.conceptId));
+  if (filter.channel) conditions.push(eq(variantsTable.channel, filter.channel));
+  if (filter.lang) conditions.push(eq(variantsTable.lang, filter.lang));
+  if (filter.status) conditions.push(eq(variantsTable.status, filter.status));
+  if (filter.briefId) {
+    const conceptRows = await db
+      .select({ id: concepts.id })
+      .from(concepts)
+      .where(eq(concepts.briefId, filter.briefId));
+    const conceptIds = conceptRows.map((r) => r.id);
+    if (conceptIds.length === 0) return [];
+    conditions.push(inArray(variantsTable.conceptId, conceptIds));
+  }
+
+  const rows = conditions.length
+    ? await db
+        .select()
+        .from(variantsTable)
+        .where(and(...conditions))
+    : await db.select().from(variantsTable);
+  return rows.map(rowToVariant);
 }
 
 export async function getVariant(variantId: string): Promise<Variant | null> {
-  return mockVariant({ id: variantId });
+  const rows = await db.select().from(variantsTable).where(eq(variantsTable.id, variantId)).limit(1);
+  return rows[0] ? rowToVariant(rows[0]) : null;
 }
 
 export async function approveVariant(variantId: string, approver: string): Promise<Approval> {

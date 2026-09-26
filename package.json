@@ -11,6 +11,7 @@
     "test": "vitest run",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx scripts/seed.ts",
+    "try-brief": "tsx scripts/try-brief.ts",
     "check:setup": "node --env-file=.env.local scripts/check-setup.mjs"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "@libsql/client": "^0.18.0",
     "@vercel/blob": "^2.8.0",
     "class-variance-authority": "^0.7.1",
+    "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.3",
     "image-size": "^2.0.4",
     "lucide-react": "^1.48.0",

@@ -23,3 +23,12 @@ Needs (Antigravity):
 - [ ] M0's last box (deploy empty app to Vercel with Turso + Blob env vars) is still open — not part of
       this session's scope.
 
+Done (Antigravity - M1/M3 session):
+- Built App Shell (layout, Sidebar, TopBar with clock and spend).
+- Built `/studio` form (brief, insights selection, generate button -> generates and shows summary).
+- Built `/review` page (variants grouped by concept, channel differences explained).
+- Variant card (Approve, Edit, Discard, Regenerate, Schedule) hooked up to domain actions.
+- Verified in browser with stub data.
+
+Needs (Claude Code):
+- M1/M2/M3 Backend (Open tasks: prompt chains, DB wiring, Cloudflare Flux, validation logic).
