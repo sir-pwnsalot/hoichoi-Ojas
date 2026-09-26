@@ -49,10 +49,14 @@ export function StudioClient({ initialInsights }: { initialInsights: InsightCard
     try {
       const brief = await createBrief({ ...form, appliedInsightIds: Array.from(selectedInsights) });
       const campaign = await generateCampaign(brief.id);
-      
-      // Fetch the variants generated
-      const generatedVariants = await listVariants({}); // M0 stub ignores filter, returns all
-      
+      if (!campaign.ok) {
+        toast.error(campaign.error);
+        return;
+      }
+
+      // Only this brief's variants, not the whole table (seeded history included).
+      const generatedVariants = await listVariants({ briefId: brief.id });
+
       setResult({ variants: generatedVariants, languages: form.languages });
       toast.success("Campaign generated successfully!");
     } catch (err: any) {
