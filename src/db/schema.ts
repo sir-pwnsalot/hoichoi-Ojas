@@ -106,6 +106,8 @@ export const metrics = sqliteTable("metrics", {
     .notNull()
     .references(() => variants.id),
   capturedAt: integer("captured_at", { mode: "timestamp_ms" }).notNull(),
+  // hours since publish at this capture point (1, 6, 24, 72, 168) — the like-for-like key
+  ageHours: integer("age_hours"),
   impressions: integer("impressions").notNull().default(0),
   reach: integer("reach").notNull().default(0),
   likes: integer("likes").notNull().default(0),
@@ -152,6 +154,16 @@ export const aiCalls = sqliteTable("ai_calls", {
   ms: integer("ms").notNull().default(0),
   ok: integer("ok", { mode: "boolean" }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const brandKit = sqliteTable("brand_kit", {
+  id: text("id").primaryKey(), // "hoichoi"
+  name: text("name").notNull(),
+  colors: text("colors", { mode: "json" }).$type<Record<string, string>>().notNull(),
+  fonts: text("fonts", { mode: "json" }).$type<Record<string, string>>().notNull(),
+  voice: text("voice").notNull(),
+  logoUrl: text("logo_url"),
+  bannedPhrases: text("banned_phrases", { mode: "json" }).$type<string[]>().notNull().default([]),
 });
 
 export const appClock = sqliteTable("app_clock", {

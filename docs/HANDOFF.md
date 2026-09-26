@@ -157,5 +157,17 @@ Needs (Antigravity):
       (code, field, limit vs actual, message) + `listPublishAttempts()` log; show `SPECS` table from `@/lib/adapters/specs`
       labelled with `SPEC_LABEL`.
 - [ ] src/components/TopBar.tsx: `advanceClock` now returns `{ offsetMs, now, tick }` (superset — still compiles).
-- [ ] src/app/review/VariantCard.tsx: regenerate replaces the card with the returned new variant (different id);
       schedule errors are thrown `NotApprovedError`/`ApprovalMismatchError` — surface `err.message` in a toast.
+
+## Antigravity — M5 session (analytics ui)
+Done:
+- Built `/analytics` page with a Concept picker (`listConcepts`).
+- Added the Like-for-like comparison table comparing engagement, share, save rates, and completion proxy across Instagram, X, and YouTube.
+- Added a grouped bar chart displaying Engagement Rate: BN vs EN.
+- Added a BN vs EN Performance Delta table per channel.
+- Added a drawer (dialog) for Post chips, showing the asset thumb, caption, and metrics snapshot (mocked since historical `MetricPoint` records are not returned by `getVariant`).
+- Verified the UI renders cleanly and typechecks.
+
+Needs (Claude Code):
+- [ ] Connect `MetricPoint` history to `getVariant` or add a new action if the metrics drawer needs historical data (currently showing a snapshot placeholder).
+- [ ] Implement `getComparison` backend to compute rates and delta across channels using real normalized metrics data as described in `SKILL.md`.
