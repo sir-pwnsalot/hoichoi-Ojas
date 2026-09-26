@@ -243,3 +243,11 @@ Needs (Antigravity):
 ### 2026-09-26 · Claude Code · prod image fix
 - Done: CF_IMAGE_MODEL default → `@cf/lykon/dreamshaper-8-lcm` (flux-1-schnell is 1:1 only, now a labelled CONFIG ERROR). SD models' raw image/png responses now parsed. Dims fitted per model (`fitToModel`). Failures labelled RATE LIMITED / CONFIG ERROR / FAILED. `putObject` refuses local writes on Vercel/production without BLOB_READ_WRITE_TOKEN.
 - Needs (🧑): set CF_IMAGE_MODEL in .env.local + Vercel; connect a Blob store to the Vercel project so BLOB_READ_WRITE_TOKEN exists in prod.
+
+### 2026-09-26 · Claude Code · graceful provider exhaustion
+- Done: `generateJSON()` now throws `AllProvidersExhaustedError` (user-facing message; `.attempts[]` = provider + reason) when a whole
+  purpose chain fails, and logs one `[llm] all providers exhausted for purpose "…": gemini (HTTP 429), openrouter_free (HTTP 429)` line.
+  `generateCampaign()` returns `{ ok: true, conceptIds, variantIds, appliedInsights } | { ok: false, error }` instead of crashing into React #441.
+- Needs (Antigravity):
+- [ ] src/app/studio/StudioClient.tsx: after `generateCampaign(brief.id)`, `if (!campaign.ok) { toast.error(campaign.error); return; }`.
+      Right now it ignores the result, so a failed run still shows "Campaign generated successfully!".

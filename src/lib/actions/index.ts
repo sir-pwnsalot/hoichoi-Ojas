@@ -1,5 +1,5 @@
 export { createBrief, generateCampaign, listConcepts } from "./brief";
-export type { GenerateCampaignResult } from "./brief";
+export type { GenerateCampaignResult, GeneratedCampaign } from "./brief";
 
 export {
   listVariants,

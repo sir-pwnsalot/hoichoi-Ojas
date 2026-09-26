@@ -30,6 +30,21 @@ export class BudgetExceededError extends Error {
   }
 }
 
+// Thrown by generateJSON() when every provider in the purpose's chain failed
+// (rate limits, outages, timeouts or repeated schema mismatches). Actions
+// catch it and return a normal error result rather than crashing into a 500.
+export class AllProvidersExhaustedError extends Error {
+  constructor(
+    public readonly purpose: LlmPurpose,
+    public readonly attempts: { provider: string; reason: string }[],
+  ) {
+    super(
+      "All AI providers are currently rate-limited or unavailable — try again in a few minutes, or switch LLM_TIER to premium.",
+    );
+    this.name = "AllProvidersExhaustedError";
+  }
+}
+
 type ProviderName = "gemini" | "groq" | "openrouter_free" | "openrouter_premium";
 
 interface ProviderCallResult {
@@ -264,7 +279,7 @@ export async function generateJSON<T>(args: GenerateJSONArgs<T>): Promise<T> {
   const { purpose, system, user, schema, temperature = 0.7 } = args;
   const chain = providerChainFor(purpose);
 
-  let lastError: unknown;
+  const attempts: { provider: ProviderName; reason: string }[] = [];
   for (const provider of chain) {
     const started = Date.now();
     try {
@@ -287,10 +302,10 @@ export async function generateJSON<T>(args: GenerateJSONArgs<T>): Promise<T> {
       if (process.env.LLM_DEBUG) {
         console.error(`[llm debug] ${provider} schema mismatch (retry):`, retryParsed.error.message, "\nraw:", retry.raw);
       }
-      lastError = retryParsed.error;
+      attempts.push({ provider, reason: "schema validation failed twice" });
     } catch (err) {
       if (err instanceof BudgetExceededError) throw err;
-      lastError = err;
+      attempts.push({ provider, reason: failureReason(err) });
       if (process.env.LLM_DEBUG) console.error(`[llm debug] ${provider} failed:`, err);
       await logAiCall({
         provider,
@@ -304,9 +319,17 @@ export async function generateJSON<T>(args: GenerateJSONArgs<T>): Promise<T> {
       });
     }
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error(`All providers failed for purpose "${purpose}"`);
+  console.error(
+    `[llm] all providers exhausted for purpose "${purpose}": ` +
+      attempts.map((a) => `${a.provider} (${a.reason})`).join(", "),
+  );
+  throw new AllProvidersExhaustedError(purpose, attempts);
+}
+
+function failureReason(err: unknown): string {
+  if (err instanceof ProviderHttpError) return `HTTP ${err.status}`;
+  if (err instanceof Error) return `${err.name}: ${err.message.slice(0, 120)}`;
+  return String(err).slice(0, 120);
 }
 
 export async function getSpendSummary(): Promise<SpendSummary> {

@@ -9,6 +9,7 @@ import { generatePlanBundle, toCreativePlan } from "@/lib/ai/plan";
 import { generateCopy } from "@/lib/ai/copy";
 import { generateBnCopyWithCritic, buildCriticResult } from "@/lib/ai/critic";
 import { generateConceptBaseImages } from "@/lib/ai/base-images";
+import { AllProvidersExhaustedError } from "@/lib/ai/llm";
 import { recomputeConceptTailoring } from "@/lib/assets";
 import { rowToBrief } from "@/lib/repo";
 import type { Brief, BriefInput, Channel, Concept, InsightCard } from "@/lib/types";
@@ -66,7 +67,12 @@ export interface AppliedInsightResult {
   lever: InsightCard["lever"];
 }
 
-export interface GenerateCampaignResult {
+export type GenerateCampaignResult =
+  | ({ ok: true } & GeneratedCampaign)
+  // Every AI provider failed (rate limits/outage): show `error` to the user.
+  | { ok: false; error: string };
+
+export interface GeneratedCampaign {
   conceptIds: string[];
   variantIds: string[];
   appliedInsights: AppliedInsightResult[]; // what the plan actually did with each selected insight
@@ -77,6 +83,17 @@ export interface GenerateCampaignResult {
 // -> bn critic + regenerate-once -> independence check -> persisted draft
 // variants. See docs/ARCHITECTURE.md's flow.
 export async function generateCampaign(briefId: string): Promise<GenerateCampaignResult> {
+  try {
+    return { ok: true, ...(await runCampaignPipeline(briefId)) };
+  } catch (err) {
+    // Thrown server-action errors reach the client as an opaque 500 in prod,
+    // so provider exhaustion comes back as a displayable result instead.
+    if (err instanceof AllProvidersExhaustedError) return { ok: false, error: err.message };
+    throw err;
+  }
+}
+
+async function runCampaignPipeline(briefId: string): Promise<GeneratedCampaign> {
   const brief = await getBriefOrThrow(briefId);
   const appliedInsights = await getActiveAppliedInsights(brief.appliedInsightIds);
 
