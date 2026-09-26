@@ -130,6 +130,22 @@ async function safeText(res: Response): Promise<string> {
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
+// 429/5xx are frequently transient on free tiers (upstream overload, shared
+// rate limits) — a couple of short retries before handing off to the next
+// provider in the chain meaningfully raises the odds a purpose-chain
+// succeeds at all. `initFactory` (not a static init) so each attempt gets
+// its own fresh AbortSignal.timeout instead of racing a shared deadline.
+async function fetchWithRetry(url: string, initFactory: () => RequestInit): Promise<Response> {
+  const delaysMs = [1000, 2500];
+  let res = await fetch(url, initFactory());
+  for (const delay of delaysMs) {
+    if (res.status !== 429 && res.status < 500) return res;
+    await new Promise((r) => setTimeout(r, delay));
+    res = await fetch(url, initFactory());
+  }
+  return res;
+}
+
 async function callGemini(args: {
   system: string;
   user: string;
@@ -137,9 +153,9 @@ async function callGemini(args: {
 }): Promise<ProviderCallResult> {
   const apiKey = requireEnv("GEMINI_API_KEY");
   const model = requireEnv("GEMINI_MODEL_COPY");
-  const res = await fetch(
+  const res = await fetchWithRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
+    () => ({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -155,7 +171,7 @@ async function callGemini(args: {
         },
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    },
+    }),
   );
   if (!res.ok) throw new ProviderHttpError("gemini", res.status, await safeText(res));
   const json = await res.json();
@@ -178,7 +194,7 @@ async function callOpenAiCompatible(
 ): Promise<ProviderCallResult> {
   const apiKey = requireEnv(apiKeyEnv);
   const model = requireEnv(modelEnv);
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const res = await fetchWithRetry(`${baseUrl}/chat/completions`, () => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -193,7 +209,7 @@ async function callOpenAiCompatible(
       temperature: args.temperature,
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  }));
   if (!res.ok) throw new ProviderHttpError(provider, res.status, await safeText(res));
   const json = await res.json();
   const raw: string = json.choices?.[0]?.message?.content ?? "";

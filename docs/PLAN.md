@@ -12,10 +12,10 @@ Budget ~7h solo. Each milestone ends deployable. Times are targets, not limits.
 ## M1 · Brief → tailored copy (0:45–2:15)
 - [ ] Brief form: title, show/topic, key message, audience, languages [bn, en], tone, CTA goal, date; brief may itself be in Bengali
 - [ ] Insight cards panel on the brief form (reads active `insights`; empty state OK until M6)
-- [ ] Creative plan call → per channel: angle, hook, tone, length, CTA type, hashtag strategy, visual composition, image prompt (Zod-validated)
-- [ ] Copy generation: separate calls per (channel × language); bn uses the Bengali system prompt
-- [ ] Nativeness critic (bn) + independence check (bn is not a translation of en); regenerate once if score < 4
-- [ ] Persist as `variants` (status `draft`), with `appliedInsightIds` on the brief
+- [x] Creative plan call → per channel: angle, hook, tone, length, CTA type, hashtag strategy, visual composition, image prompt (Zod-validated)
+- [x] Copy generation: separate calls per (channel × language); bn uses the Bengali system prompt
+- [x] Nativeness critic (bn) + independence check (bn is not a translation of en); regenerate once if score < 4
+- [x] Persist as `variants` (status `draft`), with `appliedInsightIds` on the brief
 
 ## M2 · Visuals (2:15–3:30)
 - [ ] `image.ts`: Cloudflare Flux → Pollinations → Gemini (paid) fallback chain; generate at native size per channel
