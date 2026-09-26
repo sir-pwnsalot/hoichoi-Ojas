@@ -7,6 +7,7 @@ import { now as appNow } from "./clock";
 import { getAdapter, AdapterRejectedError } from "@/lib/adapters";
 import { logAttemptToDb } from "@/lib/adapters/base";
 import { payloadForVariant } from "@/lib/adapters/payload";
+import { captureDue } from "@/lib/analytics/ingest";
 import { activeApproval, contentHashOf, rowToVariant } from "@/lib/repo";
 import type { Variant, Approval, VariantStatus, Rejection } from "@/lib/types";
 
@@ -38,6 +39,7 @@ export function schedule(
 export interface TickResult {
   published: string[];
   rejected: string[];
+  captured: number; // metric snapshots written by the simulator this tick
 }
 
 // Publishes every scheduled variant whose time (app clock) has come.
@@ -51,7 +53,7 @@ export async function runSchedulerTick(): Promise<TickResult> {
     .innerJoin(variants, eq(schedules.variantId, variants.id))
     .where(and(lte(schedules.scheduledFor, at), eq(variants.status, "scheduled")));
 
-  const result: TickResult = { published: [], rejected: [] };
+  const result: TickResult = { published: [], rejected: [], captured: 0 };
   const seen = new Set<string>();
   for (const { variant: row } of due) {
     if (seen.has(row.id)) continue; // a variant rescheduled twice publishes once
@@ -82,5 +84,7 @@ export async function runSchedulerTick(): Promise<TickResult> {
     await db.update(variants).set({ status: next }).where(eq(variants.id, v.id));
     (ok ? result.published : result.rejected).push(v.id);
   }
+  // Simulator: snapshot every published post at each capture point the clock has passed.
+  result.captured = await captureDue(at);
   return result;
 }

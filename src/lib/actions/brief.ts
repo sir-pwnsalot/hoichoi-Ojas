@@ -179,13 +179,10 @@ export async function generateCampaign(briefId: string): Promise<GenerateCampaig
   return { conceptIds: [conceptId], variantIds };
 }
 
-export async function listConcepts(briefId: string): Promise<Concept[]> {
-  return [
-    {
-      id: randomUUID(),
-      briefId,
-      name: "Episode 5 launch",
-      createdAt: new Date(),
-    },
-  ];
+export async function listConcepts(briefId?: string): Promise<Concept[]> {
+  const q = db.select().from(concepts);
+  const rows = briefId ? await q.where(eq(concepts.briefId, briefId)) : await q;
+  return rows
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    .map((r) => ({ id: r.id, briefId: r.briefId, name: r.name, createdAt: r.createdAt }));
 }

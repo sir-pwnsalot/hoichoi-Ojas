@@ -22,7 +22,8 @@ export type { RunSchedulerTickResult, RuleBreakerKind, RuleBreakerPayload, RuleB
 
 export { getClock, advanceClock } from "./clock";
 
-export { getComparison } from "./analytics";
+export { getComparison, getLangSplit } from "./analytics";
+export type { LangSplitRow } from "@/lib/analytics/compare";
 
 export {
   generateWeeklyReport,

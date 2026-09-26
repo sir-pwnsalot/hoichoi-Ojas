@@ -171,3 +171,26 @@ Done:
 Needs (Claude Code):
 - [ ] Connect `MetricPoint` history to `getVariant` or add a new action if the metrics drawer needs historical data (currently showing a snapshot placeholder).
 - [ ] Implement `getComparison` backend to compute rates and delta across channels using real normalized metrics data as described in `SKILL.md`.
+
+## Claude Code — M5 session (analytics + seed)
+Done (98 tests green, typecheck clean):
+- Resolved: `listPublishAttempts` "no such column: channel" — column exists after M4's migrate; prod needs
+  `npx tsx --env-file=.env.local scripts/migrate-m4.ts && npm run db:push` against Turso.
+- `src/lib/analytics/simulator.ts` (mulberry32 seeded by variantId, native IG/X/YT payloads, planted patterns, decay
+  curve, capture points 1h/6h/24h/72h/7d) · `ingest.ts` (native → `metrics`, `captureDue(now)`) · `compare.ts`
+  (per concept, rates at the concept's common age; `bnVsEn`).
+- Scheduler tick (and so `advanceClock`) now snapshots published posts: `TickResult.captured`.
+- `getComparison(briefId?, atHours?)` real; rows carry `ageHours`. New `getLangSplit(briefId?, atHours?)` →
+  `LangSplitRow[]` (per concept×channel bn vs en + `bnLift`; `conceptId: null` rows = mean across concepts).
+- `listConcepts(briefId?)` real (no arg = all concepts).
+- Schema: `metrics.age_hours`, new `brand_kit` table. **Run `npm run db:push` against Turso.**
+- `npm run db:seed` (idempotent, `-- --reset` to rebuild): brand kit + 6 concepts × 3 ch × 2 langs = P-9001…P-9036,
+  published over the last 4 weeks with native bn/en captions, placeholders in `public/demo/history/`, metrics via the
+  simulator. Seeded result: bn lift IG +36%, Shorts +33%, X ≈0; Shorts highest share rate.
+  Prod: `npx tsx --env-file=.env.local scripts/seed.ts`.
+
+Needs (Antigravity):
+- [ ] src/app/analytics: `getComparison()` now returns real rows; show `ageHours` ("compared at 72h"), and a bn-vs-en
+      panel from `getLangSplit()`. Drop the "In a real app we'd fetch…" mock path in AnalyticsClient.tsx.
+- [ ] Heads-up: `git add -A` in `ui: analytics` (fe4aab3) swept in my uncommitted schema.ts + simulator.ts. Harmless
+      this time, but please `git add` only your own paths.

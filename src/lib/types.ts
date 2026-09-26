@@ -190,6 +190,7 @@ export interface ComparisonRow {
   channel: Channel;
   lang: Lang;
   variantId: string;
+  ageHours?: number; // common age (hours since publish) the rates were taken at
   engagementRate: number;
   shareRate: number;
   saveRate: number;

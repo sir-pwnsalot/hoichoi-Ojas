@@ -28,6 +28,7 @@ export async function scheduleVariant(variantId: string, scheduledFor: Date): Pr
 export interface RunSchedulerTickResult {
   published: string[];
   rejected: string[];
+  captured: number; // metric snapshots written by the simulator
 }
 
 // Publishes every due scheduled variant (app clock) through its adapter.

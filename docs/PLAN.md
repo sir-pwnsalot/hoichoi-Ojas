@@ -34,9 +34,9 @@ Budget ~7h solo. Each milestone ends deployable. Times are targets, not limits.
 - [ ] "Rule-breaker" demo panel: submit oversized / wrong-ratio / 300-char-X post and show the rejection — lib done (`submitRuleBreaker`, real bytes); panel UI pending
 
 ## M5 · Analytics store + comparison (5:00–6:00)
-- [ ] Simulator emits platform-native metric payloads for published posts → `ingest` normalises into `metrics`
-- [ ] Seed: 4 weeks history with planted patterns (see `demo-seed`)
-- [ ] Like-for-like view: per concept, the 3 platforms side by side on normalised rates; bn vs en on the same platform
+- [x] Simulator emits platform-native metric payloads for published posts → `ingest` normalises into `metrics`
+- [x] Seed: 4 weeks history with planted patterns (see `demo-seed`)
+- [x] Like-for-like view: per concept, the 3 platforms side by side on normalised rates; bn vs en on the same platform
 
 ## M6 · Report + loop (6:00–6:45)
 - [ ] `facts.ts` → `generate.ts` (JSON claims with postIds) → `verify.ts` (reject + regenerate once) → render with clickable post chips

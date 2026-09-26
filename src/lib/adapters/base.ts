@@ -39,7 +39,7 @@ export function createAdapter(channel: Channel, deps: Partial<AdapterDeps> = {})
     }
     const externalId = PREFIX[channel] + randomBytes(6).toString("base64url");
     await d.logAttempt({ ...base, ok: true, externalId, reasons: null });
-    // TODO(M5): kick off the metrics simulator schedule for this post (demo-seed).
+    // Metrics: the scheduler tick's captureDue() snapshots it at 1h/6h/24h/72h/7d.
     return { externalId, publishedAt: attemptedAt };
   }
 
