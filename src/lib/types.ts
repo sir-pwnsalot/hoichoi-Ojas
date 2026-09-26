@@ -75,6 +75,21 @@ export interface CreativePlan {
   appliedInsights: AppliedInsight[];
 }
 
+export interface SimilarityPair {
+  a: Channel;
+  b: Channel;
+  similarity: number; // 0..1, 1 - hamming/64 of 64-bit dHash
+  flagged: boolean; // similarity > threshold
+}
+
+export interface TailoringReport {
+  threshold: number; // 0.85
+  pairs: SimilarityPair[];
+  maxSimilarity: number;
+  flagged: boolean;
+  computedAt: string; // ISO
+}
+
 export interface Variant {
   id: string; // public postId, e.g. "P-0001"
   conceptId: string;
@@ -87,6 +102,11 @@ export interface Variant {
   hook: string;
   planJson: CreativePlan | null;
   imagePrompt: string;
+  // M2 fields: always set by src/lib; optional only so UI-side mock literals keep compiling.
+  baseImageUrls?: string[]; // generated text-free base images; fetch via GET /api/base-image?variantId=&frame=
+  imageProvider?: string | null;
+  imageSeed?: number | null;
+  tailoring?: TailoringReport | null; // the concept's cross-channel dHash report
   assetUrl: string | null;
   assetSha256: string | null;
   width: number | null;

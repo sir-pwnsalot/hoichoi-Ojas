@@ -7,6 +7,8 @@ import { briefs, concepts, insights as insightsTable, variants } from "@/db/sche
 import { generatePlanBundle, toCreativePlan } from "@/lib/ai/plan";
 import { generateCopy } from "@/lib/ai/copy";
 import { generateBnCopyWithCritic, buildCriticResult } from "@/lib/ai/critic";
+import { generateConceptBaseImages } from "@/lib/ai/base-images";
+import { recomputeConceptTailoring } from "@/lib/assets";
 import type { Brief, BriefInput, Channel, Concept, InsightCard } from "@/lib/types";
 
 const CHANNELS: Channel[] = ["instagram", "x", "youtube"];
@@ -77,9 +79,10 @@ export interface GenerateCampaignResult {
   variantIds: string[];
 }
 
-// Full M1 pipeline: creative plan (per channel) -> copy per (channel x lang)
+// Full pipeline: creative plan (per channel) -> per-channel base images at
+// native aspect + dHash tailoring check (M2) -> copy per (channel x lang)
 // -> bn critic + regenerate-once -> independence check -> persisted draft
-// variants. Images stay null until M2. See docs/ARCHITECTURE.md's flow.
+// variants. See docs/ARCHITECTURE.md's flow.
 export async function generateCampaign(briefId: string): Promise<GenerateCampaignResult> {
   const brief = await getBriefOrThrow(briefId);
   const appliedInsights = await getActiveAppliedInsights(brief.appliedInsightIds);
@@ -94,12 +97,26 @@ export async function generateCampaign(briefId: string): Promise<GenerateCampaig
     createdAt: new Date(),
   });
 
+  const { images } = await generateConceptBaseImages({
+    instagram: bundle.channels.instagram.imagePrompt,
+    x: bundle.channels.x.imagePrompt,
+    youtube: bundle.channels.youtube.imagePrompt,
+  });
+
   let seq = await nextPostSeq();
   const variantIds: string[] = [];
 
   for (const channel of CHANNELS) {
     const plan = toCreativePlan(channel, bundle);
     const format = bundle.channels[channel].format;
+    const img = images[channel];
+    const imageFields = {
+      imagePrompt: img.prompt,
+      baseImageUrls: img.urls,
+      imageProvider: img.provider,
+      imageSeed: img.seed,
+      dhash: img.dhash,
+    };
 
     const { copy: bnCopy, critic } = await generateBnCopyWithCritic({ channel, brief, plan });
     const enCopy = await generateCopy({ lang: "en", channel, brief, plan });
@@ -121,7 +138,7 @@ export async function generateCampaign(briefId: string): Promise<GenerateCampaig
         cta: bnCopy.cta,
         hook: bnCopy.hook,
         planJson: plan as unknown as Record<string, unknown>,
-        imagePrompt: plan.imagePrompt,
+        ...imageFields,
         assetUrl: null,
         assetSha256: null,
         width: null,
@@ -146,7 +163,7 @@ export async function generateCampaign(briefId: string): Promise<GenerateCampaig
         cta: enCopy.cta,
         hook: enCopy.hook,
         planJson: plan as unknown as Record<string, unknown>,
-        imagePrompt: plan.imagePrompt,
+        ...imageFields,
         assetUrl: null,
         assetSha256: null,
         width: null,
@@ -164,6 +181,9 @@ export async function generateCampaign(briefId: string): Promise<GenerateCampaig
 
     variantIds.push(bnId, enId);
   }
+
+  // Persist the concept's cross-channel dHash report (non-negotiable #1).
+  await recomputeConceptTailoring(conceptId);
 
   // Record what the plan actually applied, not just what was offered —
   // non-negotiable #5 (insights reach the brief).

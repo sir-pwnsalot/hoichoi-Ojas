@@ -6,13 +6,16 @@ import { db } from "@/db";
 import { concepts, variants as variantsTable } from "@/db/schema";
 import { transition, type VariantAction } from "@/lib/domain/status";
 import { computeContentHash } from "@/lib/domain/approval";
-import type { Approval, Channel, Lang, Variant, VariantStatus } from "@/lib/types";
+import type { Approval, Channel, Lang, TailoringReport, Variant, VariantStatus } from "@/lib/types";
 
 // listVariants/getVariant are DB-backed (M1). approve/edit/discard/regenerate
 // stay M0 mock stubs — already run through the real domain gate so the UI
 // team can build against true state-machine behavior — pending M3 wiring.
 
-function rowToVariant(row: typeof variantsTable.$inferSelect): Variant {
+function rowToVariant(
+  row: typeof variantsTable.$inferSelect,
+  tailoring: TailoringReport | null = null,
+): Variant {
   return {
     id: row.id,
     conceptId: row.conceptId,
@@ -25,6 +28,10 @@ function rowToVariant(row: typeof variantsTable.$inferSelect): Variant {
     hook: row.hook,
     planJson: (row.planJson as unknown as Variant["planJson"]) ?? null,
     imagePrompt: row.imagePrompt,
+    baseImageUrls: row.baseImageUrls ?? [],
+    imageProvider: row.imageProvider,
+    imageSeed: row.imageSeed,
+    tailoring,
     assetUrl: row.assetUrl,
     assetSha256: row.assetSha256,
     width: row.width,
@@ -56,6 +63,10 @@ function mockVariant(overrides: Partial<Variant> = {}): Variant {
     imagePrompt:
       overrides.imagePrompt ??
       "cinematic still from a bengali drama series, dramatic lighting, 4:5 portrait",
+    baseImageUrls: overrides.baseImageUrls ?? [],
+    imageProvider: overrides.imageProvider ?? null,
+    imageSeed: overrides.imageSeed ?? null,
+    tailoring: overrides.tailoring ?? null,
     assetUrl: overrides.assetUrl ?? null,
     assetSha256: overrides.assetSha256 ?? null,
     width: overrides.width ?? null,
@@ -101,12 +112,27 @@ export async function listVariants(filter: ListVariantsFilter = {}): Promise<Var
         .from(variantsTable)
         .where(and(...conditions))
     : await db.select().from(variantsTable);
-  return rows.map(rowToVariant);
+  return withTailoring(rows);
+}
+
+// Attaches each concept's stored dHash similarity report (non-negotiable #1).
+async function withTailoring(rows: (typeof variantsTable.$inferSelect)[]): Promise<Variant[]> {
+  const conceptIds = [...new Set(rows.map((r) => r.conceptId))];
+  if (conceptIds.length === 0) return [];
+  const conceptRows = await db
+    .select({ id: concepts.id, similarityJson: concepts.similarityJson })
+    .from(concepts)
+    .where(inArray(concepts.id, conceptIds));
+  const byConcept = new Map(
+    conceptRows.map((c) => [c.id, (c.similarityJson as unknown as TailoringReport | null) ?? null]),
+  );
+  return rows.map((r) => rowToVariant(r, byConcept.get(r.conceptId) ?? null));
 }
 
 export async function getVariant(variantId: string): Promise<Variant | null> {
   const rows = await db.select().from(variantsTable).where(eq(variantsTable.id, variantId)).limit(1);
-  return rows[0] ? rowToVariant(rows[0]) : null;
+  if (!rows[0]) return null;
+  return (await withTailoring(rows))[0];
 }
 
 export async function approveVariant(variantId: string, approver: string): Promise<Approval> {

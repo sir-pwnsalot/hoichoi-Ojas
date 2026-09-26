@@ -18,10 +18,10 @@ Budget ~7h solo. Each milestone ends deployable. Times are targets, not limits.
 - [x] Persist as `variants` (status `draft`), with `appliedInsightIds` on the brief
 
 ## M2 · Visuals (2:15–3:30)
-- [ ] `image.ts`: Cloudflare Flux → Pollinations → Gemini (paid) fallback chain; generate at native size per channel
+- [x] `image.ts`: Cloudflare Flux → Pollinations → Gemini (paid) fallback chain; generate at native size per channel
 - [ ] `CanvasComposer`: headline/CTA overlay in bn/en using brand kit, per-channel layout and safe zones → PNG → Blob
 - [ ] `VideoComposer`: 9:16 ~8–12s clip (Ken Burns over 2–3 frames + animated captions) → MP4 → Blob
-- [ ] dHash similarity check across a brief's variants (non-negotiable #1)
+- [x] dHash similarity check across a brief's variants (non-negotiable #1)
 
 ## M3 · Review gate (3:30–4:15)
 - [ ] Review screen: variants grouped by channel × language, the 3 image prompts side by side, critic score and flagged phrases

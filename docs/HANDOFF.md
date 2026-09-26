@@ -71,3 +71,52 @@ fallback model (`google/gemma-4-26b-a4b-it:free`) is separately rate-limited ups
 shared pool. `npm run typecheck` and `npm test` are green throughout. Next session: re-run
 `LLM_DEBUG=1 npm run try-brief` once the Gemini quota window resets (or point `GEMINI_API_KEY` at a fresh
 key) — if it still fails, the debug output names the exact provider/status, no more guessing needed.
+
+## Claude Code — M2 session (image backend)
+Done:
+- `src/lib/ai/image.ts`: `generateImage({prompt,width,height,seed?})` — chain from `IMAGE_PROVIDER_ORDER`
+  (Cloudflare → Pollinations → Gemini, Gemini only if `GEMINI_IMAGE_MODEL` set + budget check). Always appends
+  "no text, no letters, no watermark". Generates at the channel's native aspect (`GENERATION_SIZE`: IG 1024×1280,
+  X 1536×864, Shorts 864×1536); output whose measured aspect is off by >1% is a provider failure, never cropped.
+  Cached by sha256(prompt,w,h,seed) under `gen/` in Blob / `public/uploads`. Every call logged to `ai_calls` (purpose "image").
+- **Env change**: `CF_IMAGE_MODEL` must be a Flux 2 model (`@cf/black-forest-labs/flux-2-klein-4b`, multipart input).
+  `flux-1-schnell` rejects width/height (1:1 only) so it's skipped with a clear error. Update `.env.local` + Vercel env.
+  Workers AI latency is 15–60 s+/image and sometimes times out (60 s) → Pollinations fallback kicks in.
+- `src/lib/ai/tailoring.ts`: dHash (sharp, 9×8 greyscale → 64 bits), `similarity`, `buildTailoringReport`. Tests prove a
+  crop/resize is flagged (>0.85) and different images aren't.
+- `src/lib/ai/base-images.ts` + `generateCampaign`: base images per channel in parallel (Shorts: 2–3 vertical frames),
+  dHash check, flagged pair → regenerate with new seed + stronger reframing (≤2 retries). Stored on both bn+en variants.
+- Schema: `variants.base_image_urls|image_provider|image_seed|dhash`, `concepts.similarity_json` (db:push done locally —
+  **run `npm run db:push` against Turso before deploying**).
+- `Variant` gains `baseImageUrls`, `imageProvider`, `imageSeed`, `tailoring: TailoringReport | null` (optional in the type
+  only so UI mock literals compile; `listVariants`/`getVariant` always set them). `tailoring.pairs[]` =
+  `{a,b,similarity,flagged}`, plus `maxSimilarity`, `flagged`, `threshold` — for the review screen's similarity %.
+- `src/lib/media/probe.ts`: facts from bytes (magic-byte sniff, sha256, sharp dims, mp4box for MP4 duration/dims incl.
+  fragmented MediaRecorder output). Adapters (M4) should reuse it.
+
+### `/api/assets` contract (for CanvasComposer / VideoComposer)
+- `POST /api/assets` — `multipart/form-data` with `file` (Blob) **and `variantId`** (e.g. `P-0001`); or raw bytes with
+  `?variantId=P-0001`. (A file named `variant-P-0001.png` is accepted as a fallback, but please send `variantId`.)
+- Accepted: PNG / JPEG / WebP images, MP4 video (WebM stored but duration/dims null → adapters will reject it for Shorts).
+  Max 4.5 MB (Vercel body limit). Upload the exact native size: IG 1080×1350, X 1600×900, Shorts 1080×1920.
+- 201 → `{ variantId, url, format, mime, sha256, bytes, width, height, durationSec, status, approvalCleared, tailoring }`
+  — all measured server-side. Use `url` as the asset URL.
+- Errors → `{ error: { code, message } }`: 400 `BAD_VARIANT_ID|EMPTY_BODY|BAD_REQUEST`, 404 `VARIANT_NOT_FOUND`,
+  409 `VARIANT_LOCKED` (scheduled/published/discarded), 413 `FILE_TOO_LARGE`, 415 `UNSUPPORTED_FORMAT`.
+- Uploading counts as an edit: an approved variant goes back to `draft` and its approval is revoked (non-negotiable #3).
+- `GET /api/base-image?variantId=P-0001&frame=0` — the text-free base image, same-origin (no canvas taint).
+  `X-Frame-Count` header = number of frames (Shorts 2–3; also `variant.baseImageUrls.length`). 404 `NO_BASE_IMAGE` if none.
+
+Needs (Antigravity):
+- [ ] src/components/render/CanvasComposer.tsx: draw from `/api/base-image?variantId=${id}` (not `variant.assetUrl` /
+      picsum), append `variantId` to the FormData, and treat non-2xx as an error (don't fall back to a local blob URL).
+- [ ] src/components/render/VideoComposer.tsx: same; frames = `/api/base-image?variantId=${id}&frame=${i}` for
+      i < baseImageUrls.length; prefer `video/mp4` in MediaRecorder.
+- [ ] src/app/review/VariantCard.tsx (uncommitted WIP): imports `../components/render/*` — should be
+      `@/components/render/*`; currently breaks `npm run typecheck`.
+- [ ] Review screen: show `variant.tailoring.pairs` similarity % and the 3 `imagePrompt`s side by side.
+
+Verified (M2): 34 tests green; typecheck clean for Claude-owned files. Live: Cloudflare Flux 2 + Pollinations generate at
+native aspect, cache hits on rerun; `POST /api/assets` measured a 1080×1350 PNG from its bytes, revoked the approval and
+reset status to draft; `GET /api/base-image` serves the frame. Full `try-brief` got through plan + base images, then
+failed in the **copy** step (Gemini free quota exhausted + OpenRouter free model 429) — same as M1, needs fresh quota/key.

@@ -9,6 +9,8 @@ import { estimateCostUsd } from "@/lib/ai/pricing";
 // provider SDK directly from a route or action. See skill `ai-providers`.
 
 export type LlmPurpose = "copy" | "critic" | "plan" | "report" | "insight_extraction";
+// Ledger purposes also include non-LLM AI calls (image.ts).
+export type AiCallPurpose = LlmPurpose | "image";
 
 export interface GenerateJSONArgs<T> {
   purpose: LlmPurpose;
@@ -57,7 +59,7 @@ async function getTotalSpendUsd(): Promise<number> {
   return rows.reduce((sum, row) => sum + row.costUsd, 0);
 }
 
-async function assertBudget(estimateUsd: number): Promise<void> {
+export async function assertBudget(estimateUsd: number): Promise<void> {
   const cap = Number(process.env.BUDGET_USD_CAP ?? "20");
   const spent = await getTotalSpendUsd();
   if (spent + estimateUsd > cap) {
@@ -65,10 +67,10 @@ async function assertBudget(estimateUsd: number): Promise<void> {
   }
 }
 
-async function logAiCall(input: {
+export async function logAiCall(input: {
   provider: string;
   model: string;
-  purpose: LlmPurpose;
+  purpose: AiCallPurpose;
   inTokens: number;
   outTokens: number;
   costUsd: number;

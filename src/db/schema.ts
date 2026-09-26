@@ -29,6 +29,8 @@ export const concepts = sqliteTable("concepts", {
     .notNull()
     .references(() => briefs.id),
   name: text("name").notNull(),
+  // dHash cross-channel similarity report (lib/ai/tailoring.ts)
+  similarityJson: text("similarity_json", { mode: "json" }).$type<Record<string, unknown>>(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
 
@@ -46,6 +48,12 @@ export const variants = sqliteTable("variants", {
   hook: text("hook").notNull(),
   planJson: text("plan_json", { mode: "json" }).$type<Record<string, unknown>>(),
   imagePrompt: text("image_prompt").notNull(),
+  // Generated (text-free) base images at native aspect; Shorts has 2–3 frames.
+  baseImageUrls: text("base_image_urls", { mode: "json" }).$type<string[]>().notNull().default([]),
+  imageProvider: text("image_provider"),
+  imageSeed: integer("image_seed"),
+  // 64-bit dHash (hex) of the current visual: composed image if uploaded, else base frame 0
+  dhash: text("dhash"),
   assetUrl: text("asset_url"),
   assetSha256: text("asset_sha256"),
   width: integer("width"),
