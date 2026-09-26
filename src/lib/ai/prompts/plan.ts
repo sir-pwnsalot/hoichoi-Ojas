@@ -38,7 +38,7 @@ Rules:
 - YouTube Shorts: 9:16 video, vertical, subject centred, strong motion hook in the first 1.5s.
 - Every imagePrompt must end with "no text, no letters, no watermark".
 - overlayText.bn and overlayText.en are short on-image hook lines (not full captions) — write each natively in that language; the en line is not a translation of the bn line, or vice versa.
-- If insight cards are supplied, apply only the ones that are genuinely relevant to this brief and explain how in appliedInsights[].howApplied (use the given insightId). If none apply, return an empty appliedInsights array — do not force one in.
+- Insight cards (if any) were selected by the marketer from last week's verified report. Treat each as a constraint: apply it to the channel(s)/language it concerns (hook, CTA type, format, language lead, posting time, channel emphasis) and record one appliedInsights entry per card, using its exact insightId, with a concrete howApplied naming the channel and what changed (e.g. "Shorts bn variant opens with a Bengali question hook"). Skip a card only if it truly conflicts with the brief, and then leave it out of appliedInsights.
 
 Return JSON only, matching this EXACT shape — same keys, same nesting, no renaming, no extra or missing fields, "channels" has exactly these three keys (not "youtubeShorts" or anything else):
 {
@@ -54,7 +54,7 @@ No markdown, no commentary, no fields beyond this shape.`;
 
 export function buildPlanUserPrompt(brief: Brief, appliedInsights: InsightCard[]): string {
   const insightsText = appliedInsights.length
-    ? appliedInsights.map((i) => `- [${i.id}] ${i.statement} → ${i.recommendation}`).join("\n")
+    ? appliedInsights.map((i) => `- insightId=${i.id} · lever=${i.lever} · ${i.statement} → ${i.recommendation}`).join("\n")
     : "(none active)";
   return `Brief (written in ${brief.briefLang === "bn" ? "Bengali" : "English"}):
 Title: ${brief.title}
@@ -64,7 +64,7 @@ Audience: ${brief.audience}
 Tone: ${brief.tone}
 CTA goal: ${brief.ctaGoal}
 ${brief.rawText ? `Raw brief text: ${brief.rawText}\n` : ""}
-Active insight cards to consider applying:
+Insight cards selected for this brief (apply each):
 ${insightsText}
 
 Produce the concept + per-channel plan JSON now.`;

@@ -58,9 +58,17 @@ async function nextPostSeq(): Promise<number> {
   return rows.length + 1;
 }
 
+export interface AppliedInsightResult {
+  insightId: string;
+  howApplied: string;
+  statement: string;
+  lever: InsightCard["lever"];
+}
+
 export interface GenerateCampaignResult {
   conceptIds: string[];
   variantIds: string[];
+  appliedInsights: AppliedInsightResult[]; // what the plan actually did with each selected insight
 }
 
 // Full pipeline: creative plan (per channel) -> per-channel base images at
@@ -72,6 +80,9 @@ export async function generateCampaign(briefId: string): Promise<GenerateCampaig
   const appliedInsights = await getActiveAppliedInsights(brief.appliedInsightIds);
 
   const bundle = await generatePlanBundle(brief, appliedInsights);
+  // Only keep insight IDs we actually offered (the model can't invent one).
+  const offered = new Map(appliedInsights.map((i) => [i.id, i]));
+  bundle.appliedInsights = bundle.appliedInsights.filter((a) => offered.has(a.insightId));
 
   const conceptId = randomUUID();
   await db.insert(concepts).values({
@@ -176,7 +187,15 @@ export async function generateCampaign(briefId: string): Promise<GenerateCampaig
     .set({ appliedInsightIds: bundle.appliedInsights.map((a) => a.insightId) })
     .where(eq(briefs.id, briefId));
 
-  return { conceptIds: [conceptId], variantIds };
+  return {
+    conceptIds: [conceptId],
+    variantIds,
+    appliedInsights: bundle.appliedInsights.map((a) => ({
+      ...a,
+      statement: offered.get(a.insightId)!.statement,
+      lever: offered.get(a.insightId)!.lever,
+    })),
+  };
 }
 
 export async function listConcepts(briefId?: string): Promise<Concept[]> {

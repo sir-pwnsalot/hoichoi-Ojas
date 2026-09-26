@@ -94,13 +94,16 @@ export function StudioClient({ initialInsights }: { initialInsights: InsightCard
               <CardContent>
                 <div className="space-y-4">
                   {v.planJson?.appliedInsights && v.planJson.appliedInsights.length > 0 && (
-                    <div className="text-sm space-y-2">
-                      <p className="text-zinc-400 font-medium text-xs uppercase tracking-wider">Applied Insights</p>
-                      <ul className="space-y-1.5">
+                    <div className="text-sm space-y-2 bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-md">
+                      <p className="text-yellow-500/80 font-semibold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                        <Lightbulb className="w-3.5 h-3.5" />
+                        Applied Insights
+                      </p>
+                      <ul className="space-y-2 pt-1">
                         {v.planJson.appliedInsights.map((ai: { howApplied: string }, idx: number) => (
-                          <li key={idx} className="flex gap-2 text-zinc-300">
-                            <Lightbulb className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
-                            <span>{ai.howApplied}</span>
+                          <li key={idx} className="flex gap-2 text-zinc-200">
+                            <ArrowRight className="w-4 h-4 text-yellow-500/50 shrink-0 mt-0.5" />
+                            <span className="leading-snug">{ai.howApplied}</span>
                           </li>
                         ))}
                       </ul>

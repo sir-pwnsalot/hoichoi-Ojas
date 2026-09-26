@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { BRAND_KIT, HISTORY } from "./seed-history";
+import { buildSeedDraft, SEED_INSIGHT_IDS, SEED_REPORT_ID } from "./seed-report";
 import type { Channel, Lang } from "../src/lib/types";
 
 const CHANNELS: Channel[] = ["instagram", "x", "youtube"];
@@ -197,6 +198,34 @@ async function main() {
   }
 
   console.log(`seed: brand kit ✓ · ${created} new history posts (${ids.length} total) · ${snapshots} new metric snapshots`);
+
+  // Verified weekly report + its insight cards, for the history week holding
+  // concepts 4–5 (12 posts). Deterministic, and checked by the real verifier.
+  if (process.argv.includes("--reset")) {
+    await db.delete(s.insights).where(eq(s.insights.reportId, SEED_REPORT_ID));
+    await db.delete(s.reports).where(eq(s.reports.id, SEED_REPORT_ID));
+  }
+  const [hasReport] = await db.select().from(s.reports).where(eq(s.reports.id, SEED_REPORT_ID));
+  if (hasReport) {
+    console.log("seed: weekly report already present");
+    return;
+  }
+  const { loadWeekFacts } = await import("../src/lib/report/facts");
+  const { verifyDraft } = await import("../src/lib/report/verify");
+  const { saveReport } = await import("../src/lib/report/insights");
+  const [first] = await db.select().from(s.publishAttempts).where(eq(s.publishAttempts.id, `hist-pub-${postId(3, 0, 0)}`));
+  const weekStart = new Date(Math.floor((first.attemptedAt.getTime() + IST) / 86_400_000) * 86_400_000 - IST);
+  const facts = await loadWeekFacts(weekStart);
+  const draft = buildSeedDraft(facts);
+  const check = verifyDraft(draft, facts);
+  if (!check.ok) throw new Error(`seed report failed verification:\n${check.errors.join("\n")}`);
+  const report = await saveReport(
+    facts,
+    { draft, verified: true, unverifiedReasons: [], attempts: 1 },
+    { reportId: SEED_REPORT_ID, insightIds: SEED_INSIGHT_IDS },
+    new Date(weekStart.getTime() + 7 * 86_400_000 + 9 * 3600_000),
+  );
+  console.log(`seed: verified report ${report.id} (${facts.posts.length} posts, ${report.claims.length} claims, ${report.insights?.length} insight cards)`);
 }
 
 main().then(

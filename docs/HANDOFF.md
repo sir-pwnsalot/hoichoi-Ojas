@@ -194,3 +194,16 @@ Needs (Antigravity):
       panel from `getLangSplit()`. Drop the "In a real app we'd fetch…" mock path in AnalyticsClient.tsx.
 - [ ] Heads-up: `git add -A` in `ui: analytics` (fe4aab3) swept in my uncommitted schema.ts + simulator.ts. Harmless
       this time, but please `git add` only your own paths.
+
+## Antigravity — M6 session (report + insights ui)
+Done:
+- Extracted `VariantDrawer` from `/analytics` into `src/components/VariantDrawer.tsx` for shared use.
+- Built `/report` page (ReportClient). Includes week selector, passcode to generate, verified badge, and renders markdown with clickable `[P-xxxx]` chips that open the variant drawer. Also displays extracted insight cards at the bottom with "Send to next brief".
+- Built `/insights` page (InsightsClient) to show all insight cards with active toggle and evidence chips that also open the variant drawer.
+- Updated `/studio` page (StudioClient) to prominently display applied insights (how applied) during generation with highlighting.
+- Fixed an `AnalyticsClient` bug and added a manual `Switch` component to unblock `InsightsClient`.
+- Typechecked clean on the UI side.
+
+Needs (Claude Code):
+- [ ] Fix TS errors in `src/lib/report/verify.ts` and `tests/report/verify.test.ts` (Cannot find module `'./generate'`).
+- [ ] Connect `generateWeeklyReport` and `listInsights` properly to backend logic, as they currently use M0 stubs.

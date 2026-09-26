@@ -198,19 +198,30 @@ export interface ComparisonRow {
   impressions: number;
 }
 
+export interface ReportFigure {
+  postId?: string;
+  metric: string; // per-post metric, or an aggregate key from the facts table
+  value: number; // display units (rates in %)
+}
+
 export interface ReportClaim {
   id: string;
-  statement: string;
+  statement: string; // inline [P-1234] chips
   postIds: string[];
   metric: string;
   verified: boolean;
+  section?: string; // "Summary" or a section title
+  figures?: ReportFigure[];
 }
 
 export interface Report {
   id: string;
   weekStart: Date;
-  claims: ReportClaim[];
-  verified: boolean;
+  weekEnd?: Date;
+  claims: ReportClaim[]; // only claims that passed the verifier
+  verified: boolean; // false if anything was dropped
+  unverifiedReasons?: string[]; // what was dropped and why
+  insights?: InsightCard[];
   markdown: string;
   createdAt: Date;
 }

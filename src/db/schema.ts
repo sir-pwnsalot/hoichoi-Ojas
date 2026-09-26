@@ -125,6 +125,8 @@ export const reports = sqliteTable("reports", {
   weekStart: integer("week_start", { mode: "timestamp_ms" }).notNull(),
   claimsJson: text("claims_json", { mode: "json" }).$type<unknown[]>().notNull(),
   verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+  // why claims/insights were dropped by lib/report/verify.ts (empty when verified)
+  unverifiedReasons: text("unverified_reasons", { mode: "json" }).$type<string[]>().notNull().default([]),
   markdown: text("markdown").notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });

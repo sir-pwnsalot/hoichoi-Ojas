@@ -7,8 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { getVariant } from "@/lib/actions/variants";
+import { VariantDrawer } from "@/components/VariantDrawer";
 
 export function AnalyticsClient({
   concepts,
@@ -20,7 +19,6 @@ export function AnalyticsClient({
   const [selectedConcept, setSelectedConcept] = useState<string>(concepts[0]?.id || "");
   const [data, setData] = useState<ComparisonRow[]>(initialData);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
-  const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
 
   // When concept changes, we would fetch new data. For now, since it's mock, we'll just use initialData.
   // In a real app we'd fetch via getComparison(selectedConcept).
@@ -55,15 +53,6 @@ export function AnalyticsClient({
     return avgs;
   }, [data, metrics]);
 
-  useEffect(() => {
-    if (selectedVariantId) {
-      getVariant(selectedVariantId).then((v) => {
-        if (v) setSelectedVariant(v);
-      });
-    } else {
-      setSelectedVariant(null);
-    }
-  }, [selectedVariantId]);
 
   return (
     <div className="space-y-6">
@@ -248,54 +237,7 @@ export function AnalyticsClient({
         </Card>
       </div>
 
-      <Dialog open={!!selectedVariantId} onOpenChange={(open) => !open && setSelectedVariantId(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Post Details: {selectedVariant?.id}</DialogTitle>
-            <DialogDescription>
-              {selectedVariant?.channel} · {selectedVariant?.lang.toUpperCase()}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedVariant ? (
-            <div className="space-y-4">
-              {selectedVariant.assetUrl || selectedVariant.baseImageUrls?.[0] ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img 
-                  src={selectedVariant.assetUrl || selectedVariant.baseImageUrls?.[0]} 
-                  alt="Asset" 
-                  className="w-full h-auto rounded-md bg-muted object-cover" 
-                />
-              ) : (
-                <div className="w-full h-48 bg-muted rounded-md flex items-center justify-center text-sm text-muted-foreground">
-                  No Asset Available
-                </div>
-              )}
-              <div className="bg-muted/30 p-3 rounded-md text-sm whitespace-pre-wrap">
-                {selectedVariant.caption}
-              </div>
-              <div>
-                <p className="text-sm font-semibold mb-2">Metrics Snapshot</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="bg-muted p-2 rounded">
-                    <span className="block text-muted-foreground text-xs">Status</span>
-                    {selectedVariant.status}
-                  </div>
-                  <div className="bg-muted p-2 rounded">
-                    <span className="block text-muted-foreground text-xs">Views/Impressions</span>
-                    —
-                  </div>
-                  <div className="bg-muted p-2 rounded">
-                    <span className="block text-muted-foreground text-xs">Engagement</span>
-                    —
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="py-8 text-center text-sm text-muted-foreground">Loading...</div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <VariantDrawer variantId={selectedVariantId} onClose={() => setSelectedVariantId(null)} />
     </div>
   );
 }
