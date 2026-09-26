@@ -23,13 +23,14 @@ export class IllegalTransitionError extends Error {
 //   │                    │ edit                  └──tick_fail──▶ rejected
 //   └──discard──▶ discarded ──regenerate──▶ draft (new variant, version+1, parentId)
 // approved ──edit──▶ draft (approval cleared by the caller)
+// approved | rejected ──discard──▶ discarded (approval revoked by the caller)
 // rejected ──edit──▶ draft
 const TRANSITIONS: Record<VariantStatus, Partial<Record<VariantAction, VariantStatus>>> = {
   draft: { approve: "approved", discard: "discarded" },
-  approved: { edit: "draft", schedule: "scheduled" },
+  approved: { edit: "draft", schedule: "scheduled", discard: "discarded" },
   scheduled: { tick_ok: "published", tick_fail: "rejected" },
   published: {},
-  rejected: { edit: "draft" },
+  rejected: { edit: "draft", discard: "discarded" },
   discarded: { regenerate: "draft" },
 };
 

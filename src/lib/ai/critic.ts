@@ -32,16 +32,24 @@ export async function generateBnCopyWithCritic(args: {
   channel: Channel;
   brief: Brief;
   plan: CreativePlan;
+  notes?: string; // reviewer's discard note when regenerating a variant
 }): Promise<{ copy: CopyResult; critic: CriticRaw }> {
-  const { channel, brief, plan } = args;
-  let copy = await generateCopy({ lang: "bn", channel, brief, plan });
+  const { channel, brief, plan, notes: reviewerNotes } = args;
+  let copy = await generateCopy({ lang: "bn", channel, brief, plan, notes: reviewerNotes });
   let critic = await runNativenessCritic(copy);
 
   if (critic.score < 4) {
     const notes = critic.flags
       .map((f) => `"${f.phrase}" — ${f.why}. Try instead: "${f.rewrite}"`)
       .join("\n");
-    const regenCopy = await generateCopy({ lang: "bn", channel, brief, plan, notes });
+    const regenCopy = await generateCopy({
+      lang: "bn",
+      channel,
+      brief,
+      plan,
+      notes: reviewerNotes ? `${reviewerNotes}
+${notes}` : notes,
+    });
     const regenCritic = await runNativenessCritic(regenCopy);
     if (regenCritic.score >= critic.score) {
       copy = regenCopy;

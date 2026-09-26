@@ -159,7 +159,9 @@ export interface Rejection {
 
 export interface PublishAttempt {
   id: string;
-  variantId: string;
+  variantId: string | null; // null for rule-breaker demo payloads
+  channel: Channel;
+  source: "scheduler" | "rule_breaker";
   attemptedAt: Date;
   ok: boolean;
   externalId: string | null;

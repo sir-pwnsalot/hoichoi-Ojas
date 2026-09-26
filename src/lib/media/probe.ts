@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import sharp from "sharp";
+import { imageSize } from "image-size";
 import { createFile, MP4BoxBuffer, type Movie } from "mp4box";
 
 // Facts about an asset, read FROM THE BYTES — never from the upload's
@@ -85,7 +85,13 @@ export async function probeAsset(input: Uint8Array): Promise<AssetProbe> {
     // record null rather than guess. Adapters reject non-MP4 video anyway.
     return { ...base, width: null, height: null, durationSec: null };
   }
-  const meta = await sharp(input).metadata();
-  if (!meta.width || !meta.height) throw new UnsupportedAssetError("image has no readable dimensions");
-  return { ...base, width: meta.width, height: meta.height, durationSec: null };
+  // image-size parses headers only (pure JS, no decode) — cheap even for an 11 MB PNG.
+  let dims: { width?: number; height?: number };
+  try {
+    dims = imageSize(input);
+  } catch (err) {
+    throw new UnsupportedAssetError(`unreadable ${format}: ${err instanceof Error ? err.message : err}`);
+  }
+  if (!dims.width || !dims.height) throw new UnsupportedAssetError("image has no readable dimensions");
+  return { ...base, width: dims.width, height: dims.height, durationSec: null };
 }

@@ -1,86 +1,29 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { concepts, variants as variantsTable } from "@/db/schema";
-import { transition, type VariantAction } from "@/lib/domain/status";
-import { computeContentHash } from "@/lib/domain/approval";
-import type { Approval, Channel, Lang, TailoringReport, Variant, VariantStatus } from "@/lib/types";
+import { approvals, briefs, concepts, variants as variantsTable } from "@/db/schema";
+import { transition } from "@/lib/domain/status";
+import { now } from "@/lib/domain/clock";
+import { generateCopy } from "@/lib/ai/copy";
+import { buildCriticResult, generateBnCopyWithCritic } from "@/lib/ai/critic";
+import { generateChannelBaseImages } from "@/lib/ai/base-images";
+import { recomputeConceptTailoring } from "@/lib/assets";
+import {
+  activeApproval,
+  contentHashOf,
+  loadVariantRow,
+  nextPostId,
+  revokeApprovals,
+  rowToBrief,
+  rowToVariant,
+} from "@/lib/repo";
+import type { Approval, Channel, CreativePlan, Lang, TailoringReport, Variant, VariantStatus } from "@/lib/types";
 
-// listVariants/getVariant are DB-backed (M1). approve/edit/discard/regenerate
-// stay M0 mock stubs — already run through the real domain gate so the UI
-// team can build against true state-machine behavior — pending M3 wiring.
-
-function rowToVariant(
-  row: typeof variantsTable.$inferSelect,
-  tailoring: TailoringReport | null = null,
-): Variant {
-  return {
-    id: row.id,
-    conceptId: row.conceptId,
-    channel: row.channel as Channel,
-    lang: row.lang as Lang,
-    format: row.format as Variant["format"],
-    caption: row.caption,
-    hashtags: row.hashtags,
-    cta: row.cta,
-    hook: row.hook,
-    planJson: (row.planJson as unknown as Variant["planJson"]) ?? null,
-    imagePrompt: row.imagePrompt,
-    baseImageUrls: row.baseImageUrls ?? [],
-    imageProvider: row.imageProvider,
-    imageSeed: row.imageSeed,
-    tailoring,
-    assetUrl: row.assetUrl,
-    assetSha256: row.assetSha256,
-    width: row.width,
-    height: row.height,
-    bytes: row.bytes,
-    durationSec: row.durationSec,
-    criticJson: (row.criticJson as unknown as Variant["criticJson"]) ?? null,
-    status: row.status as VariantStatus,
-    version: row.version,
-    parentId: row.parentId,
-    discardNote: row.discardNote,
-    createdAt: row.createdAt,
-  };
-}
-
-function mockVariant(overrides: Partial<Variant> = {}): Variant {
-  const caption = overrides.caption ?? "আজ রাতে নতুন পর্ব — মিস করবেন না!";
-  return {
-    id: overrides.id ?? `P-${randomUUID().slice(0, 4)}`,
-    conceptId: overrides.conceptId ?? "concept-mock",
-    channel: overrides.channel ?? "instagram",
-    lang: overrides.lang ?? "bn",
-    format: overrides.format ?? "image",
-    caption,
-    hashtags: overrides.hashtags ?? ["#hoichoi", "#বাংলা"],
-    cta: overrides.cta ?? "এখনই দেখুন",
-    hook: overrides.hook ?? "এই মোড় আপনাকে চমকে দেবে",
-    planJson: overrides.planJson ?? null,
-    imagePrompt:
-      overrides.imagePrompt ??
-      "cinematic still from a bengali drama series, dramatic lighting, 4:5 portrait",
-    baseImageUrls: overrides.baseImageUrls ?? [],
-    imageProvider: overrides.imageProvider ?? null,
-    imageSeed: overrides.imageSeed ?? null,
-    tailoring: overrides.tailoring ?? null,
-    assetUrl: overrides.assetUrl ?? null,
-    assetSha256: overrides.assetSha256 ?? null,
-    width: overrides.width ?? null,
-    height: overrides.height ?? null,
-    bytes: overrides.bytes ?? null,
-    durationSec: overrides.durationSec ?? null,
-    criticJson: overrides.criticJson ?? null,
-    status: overrides.status ?? "draft",
-    version: overrides.version ?? 1,
-    parentId: overrides.parentId ?? null,
-    discardNote: overrides.discardNote ?? null,
-    createdAt: overrides.createdAt ?? new Date(),
-  };
-}
+// Review-gate actions (M3), DB-backed. Every status change goes through the
+// state machine in src/lib/domain/status.ts; every content change revokes
+// any approval (non-negotiable #3).
 
 export interface ListVariantsFilter {
   briefId?: string;
@@ -135,25 +78,28 @@ export async function getVariant(variantId: string): Promise<Variant | null> {
   return (await withTailoring(rows))[0];
 }
 
+// Latest active approval for a variant (review screen badge), or null.
+export async function getApproval(variantId: string): Promise<Approval | null> {
+  return activeApproval(variantId);
+}
+
+// Records approver, time and the hash of the exact content being approved.
 export async function approveVariant(variantId: string, approver: string): Promise<Approval> {
-  const variant = mockVariant({ id: variantId, status: "draft" });
-  transition(variant.status, "approve"); // throws IllegalTransitionError if not draft
-  const contentHash = computeContentHash({
-    caption: variant.caption,
-    hashtags: variant.hashtags,
-    cta: variant.cta,
-    hook: variant.hook,
-    assetUrl: variant.assetUrl,
-    assetSha256: variant.assetSha256,
-  });
-  return {
+  const row = await loadVariantRow(variantId);
+  const next = transition(row.status as VariantStatus, "approve"); // only drafts
+  const at = await now();
+  await revokeApprovals(variantId, at); // at most one active approval
+  const approval: Approval = {
     id: randomUUID(),
     variantId,
     approver,
-    contentHash,
-    approvedAt: new Date(),
+    contentHash: contentHashOf(rowToVariant(row)),
+    approvedAt: at,
     revokedAt: null,
   };
+  await db.insert(approvals).values(approval);
+  await db.update(variantsTable).set({ status: next }).where(eq(variantsTable.id, variantId));
+  return approval;
 }
 
 export interface EditVariantPatch {
@@ -164,32 +110,138 @@ export interface EditVariantPatch {
   imagePrompt?: string;
 }
 
-// Editing always clears any existing approval (non-negotiable #3): the
-// returned variant is forced back to "draft" via the same transition table
-// the scheduler enforces.
+// Any edit clears the approval: approved/rejected go back to draft and the
+// approval is revoked. Scheduled/published/discarded can't be edited.
 export async function editVariant(variantId: string, patch: EditVariantPatch): Promise<Variant> {
-  const current = mockVariant({ id: variantId, status: "approved" });
-  const editAction: VariantAction = "edit";
-  const nextStatus = current.status === "draft" ? current.status : transition(current.status, editAction);
-  return mockVariant({ ...current, ...patch, status: nextStatus });
+  const row = await loadVariantRow(variantId);
+  const status = row.status as VariantStatus;
+  const next = status === "draft" ? "draft" : transition(status, "edit");
+  const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  await db
+    .update(variantsTable)
+    .set({ ...clean, status: next })
+    .where(eq(variantsTable.id, variantId));
+  await revokeApprovals(variantId, await now());
+  return (await getVariant(variantId))!;
 }
 
 export async function discardVariant(variantId: string, note: string): Promise<Variant> {
-  const current = mockVariant({ id: variantId, status: "draft" });
-  const nextStatus = transition(current.status, "discard");
-  return mockVariant({ ...current, status: nextStatus, discardNote: note });
+  const row = await loadVariantRow(variantId);
+  const next = transition(row.status as VariantStatus, "discard");
+  await db
+    .update(variantsTable)
+    .set({ status: next, discardNote: note })
+    .where(eq(variantsTable.id, variantId));
+  await revokeApprovals(variantId, await now());
+  await recomputeConceptTailoring(row.conceptId);
+  return (await getVariant(variantId))!;
 }
 
-// Regeneration never mutates the discarded row — it creates a new draft
-// variant with version+1 and parentId set, per docs/ARCHITECTURE.md.
+// Never mutates the discarded row: creates a new draft (version+1, parentId)
+// by re-running this channel × language through the copy pipeline (bn via the
+// Bengali prompt + critic, never a translation) and the image pipeline, with
+// the reviewer's discard note folded in.
 export async function regenerateVariant(variantId: string, note?: string): Promise<Variant> {
-  const discarded = mockVariant({ id: variantId, status: "discarded", discardNote: note ?? null });
-  const nextStatus = transition(discarded.status, "regenerate");
-  return mockVariant({
-    id: `P-${randomUUID().slice(0, 4)}`,
-    status: nextStatus,
-    version: discarded.version + 1,
-    parentId: discarded.id,
+  const parent = await loadVariantRow(variantId);
+  const status = transition(parent.status as VariantStatus, "regenerate");
+  const reviewerNote = note?.trim() || parent.discardNote || undefined;
+  const notes = reviewerNote ? `Reviewer rejected the previous version: ${reviewerNote}` : undefined;
+
+  const [conceptRow] = await db.select().from(concepts).where(eq(concepts.id, parent.conceptId)).limit(1);
+  const [briefRow] = await db.select().from(briefs).where(eq(briefs.id, conceptRow.briefId)).limit(1);
+  const brief = rowToBrief(briefRow);
+  const channel = parent.channel as Channel;
+  const lang = parent.lang as Lang;
+  const plan: CreativePlan = (parent.planJson as unknown as CreativePlan | null) ?? {
+    channel,
+    angle: parent.hook,
+    hook: parent.hook,
+    tone: brief.tone,
+    length: "",
+    ctaType: parent.cta,
+    hashtagStrategy: "",
+    visualComposition: "",
+    imagePrompt: parent.imagePrompt,
+    appliedInsights: [],
+  };
+
+  let copy;
+  let criticJson: Record<string, unknown> | null = null;
+  if (lang === "bn") {
+    const res = await generateBnCopyWithCritic({ channel, brief, plan, notes });
+    copy = res.copy;
+    // Independence judge against the current en sibling for this channel.
+    const [enSibling] = await db
+      .select({ caption: variantsTable.caption })
+      .from(variantsTable)
+      .where(
+        and(
+          eq(variantsTable.conceptId, parent.conceptId),
+          eq(variantsTable.channel, channel),
+          eq(variantsTable.lang, "en"),
+          ne(variantsTable.status, "discarded"),
+        ),
+      )
+      .orderBy(desc(variantsTable.version))
+      .limit(1);
+    const critic = enSibling
+      ? await buildCriticResult(res.critic, copy.caption, enSibling.caption)
+      : {
+          score: res.critic.score,
+          isTranslation: false,
+          flaggedPhrases: res.critic.flags.map((f) => `${f.phrase} — ${f.why}`),
+          notes: res.critic.verdict,
+        };
+    criticJson = critic as unknown as Record<string, unknown>;
+  } else {
+    copy = await generateCopy({ lang, channel, brief, plan, notes });
+  }
+
+  // New base image(s) with a new seed; keep the parent's if generation fails.
+  let image = {
+    urls: parent.baseImageUrls ?? [],
+    provider: parent.imageProvider,
+    seed: parent.imageSeed,
+    dhash: parent.dhash,
+    prompt: parent.imagePrompt,
+  };
+  try {
+    const prompt = reviewerNote ? `${plan.imagePrompt}, art direction: ${reviewerNote}` : plan.imagePrompt;
+    image = await generateChannelBaseImages(channel, prompt, (parent.imageSeed ?? 0) + 7919 * parent.version);
+  } catch (err) {
+    console.error(`[regenerate] ${variantId} image failed, keeping parent's:`, err instanceof Error ? err.message : err);
+  }
+
+  const id = await nextPostId();
+  await db.insert(variantsTable).values({
+    id,
+    conceptId: parent.conceptId,
+    channel,
+    lang,
+    format: parent.format,
+    caption: copy.caption,
+    hashtags: copy.hashtags,
+    cta: copy.cta,
+    hook: copy.hook,
+    planJson: parent.planJson,
+    imagePrompt: image.prompt,
+    baseImageUrls: image.urls,
+    imageProvider: image.provider,
+    imageSeed: image.seed,
+    dhash: image.dhash,
+    assetUrl: null,
+    assetSha256: null,
+    width: null,
+    height: null,
+    bytes: null,
+    durationSec: null,
+    criticJson,
+    status,
+    version: parent.version + 1,
+    parentId: parent.id,
     discardNote: null,
+    createdAt: await now(),
   });
+  await recomputeConceptTailoring(parent.conceptId);
+  return (await getVariant(id))!;
 }

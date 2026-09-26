@@ -9,26 +9,10 @@ import { generateCopy } from "@/lib/ai/copy";
 import { generateBnCopyWithCritic, buildCriticResult } from "@/lib/ai/critic";
 import { generateConceptBaseImages } from "@/lib/ai/base-images";
 import { recomputeConceptTailoring } from "@/lib/assets";
+import { rowToBrief } from "@/lib/repo";
 import type { Brief, BriefInput, Channel, Concept, InsightCard } from "@/lib/types";
 
 const CHANNELS: Channel[] = ["instagram", "x", "youtube"];
-
-function rowToBrief(row: typeof briefs.$inferSelect): Brief {
-  return {
-    id: row.id,
-    title: row.title,
-    show: row.show,
-    keyMessage: row.keyMessage,
-    audience: row.audience,
-    languages: row.languages as Brief["languages"],
-    tone: row.tone,
-    ctaGoal: row.ctaGoal,
-    rawText: row.rawText,
-    briefLang: row.briefLang as Brief["briefLang"],
-    appliedInsightIds: row.appliedInsightIds,
-    createdAt: row.createdAt,
-  };
-}
 
 export async function createBrief(input: BriefInput): Promise<Brief> {
   const brief: Brief = {

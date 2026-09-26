@@ -15,3 +15,7 @@ Thumbs.db
 
 .vercel
 .env*
+
+# test artefacts
+.test.db*
+tests/fixtures/*-oversize.*

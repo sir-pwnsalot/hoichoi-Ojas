@@ -120,3 +120,13 @@ Verified (M2): 34 tests green; typecheck clean for Claude-owned files. Live: Clo
 native aspect, cache hits on rerun; `POST /api/assets` measured a 1080×1350 PNG from its bytes, revoked the approval and
 reset status to draft; `GET /api/base-image` serves the frame. Full `try-brief` got through plan + base images, then
 failed in the **copy** step (Gemini free quota exhausted + OpenRouter free model 429) — same as M1, needs fresh quota/key.
+
+## Antigravity — M4 session (queue ui)
+Done:
+- Built `/queue` page with Timeline and Schedule features.
+- Fixed Timeline sorting to be ordered by attemptedAt/createdAt.
+- Added file upload to Rule-breaker custom form.
+- Browser-verified.
+
+Needs (Claude Code):
+- [ ] `src/lib/actions/publish.ts`: `SQLITE_ERROR: no such column: channel` in `listPublishAttempts` query. Needs schema migration or column name fix in the DB.

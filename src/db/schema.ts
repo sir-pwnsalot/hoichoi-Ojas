@@ -90,9 +90,10 @@ export const schedules = sqliteTable("schedules", {
 
 export const publishAttempts = sqliteTable("publish_attempts", {
   id: text("id").primaryKey(),
-  variantId: text("variant_id")
-    .notNull()
-    .references(() => variants.id),
+  // null for rule-breaker demo payloads (not a stored variant)
+  variantId: text("variant_id").references(() => variants.id),
+  channel: text("channel").notNull().default(""),
+  source: text("source").notNull().default("scheduler"), // "scheduler" | "rule_breaker"
   attemptedAt: integer("attempted_at", { mode: "timestamp_ms" }).notNull(),
   ok: integer("ok", { mode: "boolean" }).notNull(),
   externalId: text("external_id"),

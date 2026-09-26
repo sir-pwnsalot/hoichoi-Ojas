@@ -29,6 +29,11 @@ const REFRAME_HINT: Record<Channel, string> = {
   youtube: "vertical full-body shot, subject centred, dynamic motion",
 };
 
+// One channel's base image(s) — used when a single variant is regenerated.
+export async function generateChannelBaseImages(channel: Channel, prompt: string, seed?: number): Promise<ChannelBaseImages> {
+  return generateFrames(channel, prompt, seed);
+}
+
 async function generateFrames(channel: Channel, prompt: string, seed?: number): Promise<ChannelBaseImages> {
   const { width, height } = GENERATION_SIZE[channel];
   const main = await generateImage({ prompt, width, height, seed });

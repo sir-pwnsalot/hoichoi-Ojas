@@ -8,6 +8,7 @@ export {
   editVariant,
   discardVariant,
   regenerateVariant,
+  getApproval,
 } from "./variants";
 export type { ListVariantsFilter, EditVariantPatch } from "./variants";
 
@@ -17,7 +18,7 @@ export {
   submitRuleBreaker,
   listPublishAttempts,
 } from "./publish";
-export type { RunSchedulerTickResult, RuleBreakerKind, RuleBreakerPayload } from "./publish";
+export type { RunSchedulerTickResult, RuleBreakerKind, RuleBreakerPayload, RuleBreakerResult } from "./publish";
 
 export { getClock, advanceClock } from "./clock";
 
