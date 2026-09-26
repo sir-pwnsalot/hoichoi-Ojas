@@ -12,7 +12,7 @@ description: Use when writing or changing lib/ai/llm.ts or lib/ai/image.ts, choo
 | Nativeness critic, independence judge | Gemini Flash | OpenRouter free | Claude Sonnet via OpenRouter |
 | Creative plan, image prompts, insight extraction (English JSON) | Groq (`GROQ_MODEL_FAST`), fast | Gemini Flash | same as free (cheap enough) |
 | Weekly report | Gemini Flash | OpenRouter free | Claude Sonnet via OpenRouter |
-| Images | Cloudflare Workers AI Flux schnell | Pollinations (no key) | Gemini image model (paid) |
+| Images | Cloudflare Workers AI `@cf/lykon/dreamshaper-8-lcm` (any model that accepts width/height; never flux-1-schnell, which is 1:1 only) | Pollinations (no key) | Gemini image model (paid) |
 | TTS (stretch) | Gemini TTS (free tier) | – | – |
 Do not use Groq-hosted models for Bengali generation or judging; their Bengali quality is noticeably weaker.
 
@@ -42,7 +42,7 @@ generateJSON<T>({ purpose, system, user, schema: ZodSchema<T>, temperature? }): 
 ```ts
 generateImage({ prompt, width, height, seed? }): Promise<{ bytes: Uint8Array; mime; provider; seed }>
 ```
-- Cloudflare: `POST https://api.cloudflare.com/client/v4/accounts/{id}/ai/run/{CF_IMAGE_MODEL}` with the prompt, width, height and steps (4–8 for schnell). Response contains base64 image.
+- Cloudflare: `POST https://api.cloudflare.com/client/v4/accounts/{id}/ai/run/{CF_IMAGE_MODEL}` with the prompt, width, height and steps. SD models return raw image bytes; Flux 2 returns JSON base64. `cfModelSpec()` holds per-model limits.
 - Pollinations: `GET https://image.pollinations.ai/prompt/{encoded}?width=&height=&seed=&nologo=true`.
 - Round dims to multiples of 8 or 64 as the provider requires, then **the canvas composer outputs the exact target size**. Resizing to exact dims at the *same aspect* is fine; cropping a different-aspect master is not.
 - Cache by `hash(prompt, w, h, seed)` in Blob to avoid paying twice.

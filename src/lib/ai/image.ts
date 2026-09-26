@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { assertBudget, logAiCall } from "@/lib/ai/llm";
-import { getObject, putObject } from "@/lib/storage";
+import { getObject, putObject, StorageConfigError } from "@/lib/storage";
 import type { Channel } from "@/lib/types";
 
 // Every image-model call in the app goes through generateImage(). Chain:
-// Cloudflare Flux → Pollinations → Gemini (paid; only if GEMINI_IMAGE_MODEL
+// Cloudflare Workers AI (CF_IMAGE_MODEL) → Pollinations → Gemini (paid; only if GEMINI_IMAGE_MODEL
 // is set). Images are generated at each channel's NATIVE aspect — never one
 // master cropped per channel (non-negotiable #1). See skill `ai-providers`.
 
@@ -58,10 +58,48 @@ export interface GeneratedImage {
   cached: boolean;
 }
 
+// rate_limited: free-tier quota / HTTP 429; a later call will likely work.
+// config: our env is wrong (square-only model, missing keys); retrying won't help.
+// failed: anything else (HTTP 5xx, content filter, bad bytes, timeouts).
+export type ImageFailureKind = "rate_limited" | "config" | "failed";
+
+export interface ImageFailure {
+  provider: ImageProvider;
+  kind: ImageFailureKind;
+  error: string;
+}
+
+export class ImageProviderError extends Error {
+  constructor(
+    public readonly kind: ImageFailureKind,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ImageProviderError";
+  }
+}
+
+async function httpError(res: Response): Promise<ImageProviderError> {
+  const detail = `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`;
+  return res.status === 429
+    ? new ImageProviderError("rate_limited", `rate limited, will retry next call (${detail})`)
+    : new ImageProviderError("failed", detail);
+}
+
+export function describeFailure(f: ImageFailure): string {
+  const label = f.kind === "rate_limited" ? "RATE LIMITED" : f.kind === "config" ? "CONFIG ERROR" : "FAILED";
+  return `${f.provider} [${label}]: ${f.error}`;
+}
+
 export class ImageGenerationError extends Error {
-  constructor(public readonly failures: { provider: ImageProvider; error: string }[]) {
-    super(`All image providers failed: ${failures.map((f) => `${f.provider}: ${f.error}`).join(" | ")}`);
+  constructor(public readonly failures: ImageFailure[]) {
+    super(`All image providers failed: ${failures.map(describeFailure).join(" | ")}`);
     this.name = "ImageGenerationError";
+  }
+
+  // True when every provider was only throttled: a later call should succeed.
+  get onlyRateLimited(): boolean {
+    return this.failures.length > 0 && this.failures.every((f) => f.kind === "rate_limited");
   }
 }
 
@@ -110,31 +148,85 @@ interface RawImage {
   costUsd: number;
 }
 
-// Flux 2 models on Workers AI take multipart form input with width/height;
-// other text-to-image models take JSON. flux-1-schnell only makes fixed
-// 1024x1024 images (it rejects width/height), so it can't produce native
-// aspects — fail fast instead of cropping.
+// What a Workers AI text-to-image model accepts, from the account's
+// /ai/models/schema (checked 2026-09-26). Square-only models ignore
+// width/height and can never give a native channel aspect (non-negotiable #1).
+export interface CfModelSpec {
+  input: "json" | "multipart";
+  squareOnly: boolean;
+  min: number;
+  max: number;
+  multiple: number;
+  steps: number;
+}
+
+// Fastest first (measured: dreamshaper ~4 s at 1024x1280 and 864x1536).
+export const RECOMMENDED_CF_IMAGE_MODELS = [
+  "@cf/lykon/dreamshaper-8-lcm",
+  "@cf/bytedance/stable-diffusion-xl-lightning",
+  "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+] as const;
+
+export function cfModelSpec(model: string): CfModelSpec {
+  if (model.includes("flux-1-schnell")) return { input: "json", squareOnly: true, min: 1024, max: 1024, multiple: 1, steps: 4 };
+  if (model.includes("flux-2")) return { input: "multipart", squareOnly: false, min: 256, max: 2048, multiple: 16, steps: 4 };
+  if (model.includes("dreamshaper-8-lcm")) return { input: "json", squareOnly: false, min: 256, max: 2048, multiple: 8, steps: 6 };
+  if (model.includes("stable-diffusion-xl-lightning")) return { input: "json", squareOnly: false, min: 256, max: 2048, multiple: 8, steps: 4 };
+  if (model.includes("stable-diffusion-xl-base")) return { input: "json", squareOnly: false, min: 256, max: 2048, multiple: 8, steps: 20 };
+  // Other JSON models (phoenix, lucid-origin, ...): conservative SD limits.
+  return { input: "json", squareOnly: false, min: 256, max: 2048, multiple: 8, steps: 8 };
+}
+
+// Scales width/height into the model's [min, max] box at the SAME aspect and
+// rounds to its multiple. Throws a config error if that can't hold the aspect
+// within 1% (never crops). The composer resizes to the exact native size.
+export function fitToModel(width: number, height: number, spec: CfModelSpec): { width: number; height: number } {
+  if (spec.squareOnly && width !== height) {
+    throw new ImageProviderError("config", `model only outputs 1:1, cannot make ${width}x${height}`);
+  }
+  let scale = Math.min(1, spec.max / Math.max(width, height));
+  scale = Math.max(scale, spec.min / Math.min(width, height));
+  const round = (n: number) => Math.max(spec.multiple, Math.round((n * scale) / spec.multiple) * spec.multiple);
+  const fitted = { width: round(width), height: round(height) };
+  const inRange = [fitted.width, fitted.height].every((n) => n >= spec.min && n <= spec.max);
+  if (!inRange || !aspectMatches(fitted.width, fitted.height, width, height)) {
+    throw new ImageProviderError(
+      "config",
+      `cannot fit ${width}x${height} into ${spec.min}-${spec.max}px (multiple of ${spec.multiple}) at the same aspect`,
+    );
+  }
+  return fitted;
+}
+
 async function callCloudflare(prompt: string, width: number, height: number, seed: number): Promise<RawImage> {
   const account = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
   const model = process.env.CF_IMAGE_MODEL;
-  if (!account || !token || !model) throw new Error("Cloudflare image env not set");
-  if (model.includes("flux-1-schnell")) {
-    throw new Error(`${model} only outputs 1:1 — set CF_IMAGE_MODEL to a Flux 2 model for native aspects`);
+  if (!account || !token || !model) {
+    throw new ImageProviderError("config", "CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN / CF_IMAGE_MODEL not set");
   }
+  const spec = cfModelSpec(model);
+  if (spec.squareOnly) {
+    throw new ImageProviderError(
+      "config",
+      `CF_IMAGE_MODEL=${model} ignores width/height and only outputs 1:1, so it can't make native channel aspects. ` +
+        `Set CF_IMAGE_MODEL to a model that accepts width/height, e.g. ${RECOMMENDED_CF_IMAGE_MODELS[0]}`,
+    );
+  }
+  const size = fitToModel(width, height, spec);
   let body: BodyInit;
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-  if (model.includes("flux-2")) {
+  if (spec.input === "multipart") {
     const form = new FormData();
     form.append("prompt", prompt);
-    form.append("width", String(width));
-    form.append("height", String(height));
+    form.append("width", String(size.width));
+    form.append("height", String(size.height));
     form.append("seed", String(seed));
-    form.append("steps", "4");
+    form.append("steps", String(spec.steps));
     body = form;
   } else {
     headers["Content-Type"] = "application/json";
-    body = JSON.stringify({ prompt, width, height, seed, num_steps: 6 });
+    body = JSON.stringify({ prompt, width: size.width, height: size.height, seed, num_steps: spec.steps });
   }
   const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${model}`, {
     method: "POST",
@@ -142,7 +234,11 @@ async function callCloudflare(prompt: string, width: number, height: number, see
     body,
     signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) throw await httpError(res);
+  // Stable Diffusion models return raw image bytes; Flux 2 returns JSON base64.
+  if (res.headers.get("content-type")?.startsWith("image/")) {
+    return { bytes: new Uint8Array(await res.arrayBuffer()), model, costUsd: 0 };
+  }
   const json = (await res.json()) as { result?: { image?: string } };
   const b64 = json.result?.image;
   if (!b64) throw new Error("no image in response");
@@ -160,7 +256,7 @@ async function callPollinations(prompt: string, width: number, height: number, s
   const res = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params}`, {
     signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) throw await httpError(res);
   if (!res.headers.get("content-type")?.startsWith("image/")) throw new Error("non-image response");
   return { bytes: new Uint8Array(await res.arrayBuffer()), model: "pollinations/flux", costUsd: 0 };
 }
@@ -179,7 +275,7 @@ function geminiAspect(width: number, height: number): string {
 async function callGemini(prompt: string, width: number, height: number): Promise<RawImage> {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_IMAGE_MODEL;
-  if (!apiKey || !model) throw new Error("Gemini image env not set");
+  if (!apiKey || !model) throw new ImageProviderError("config", "GEMINI_API_KEY / GEMINI_IMAGE_MODEL not set");
   const costUsd = Number(process.env.GEMINI_IMAGE_PRICE_USD ?? "0.04");
   await assertBudget(costUsd);
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
@@ -194,7 +290,7 @@ async function callGemini(prompt: string, width: number, height: number): Promis
     }),
     signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) throw await httpError(res);
   const json = (await res.json()) as {
     candidates?: { content?: { parts?: { inlineData?: { data?: string } }[] } }[];
   };
@@ -247,7 +343,7 @@ export async function generateImage(args: GenerateImageArgs): Promise<GeneratedI
     if (img) return { ...entry, bytes: img.bytes, cached: true };
   }
 
-  const failures: { provider: ImageProvider; error: string }[] = [];
+  const failures: ImageFailure[] = [];
   for (const provider of providerOrder()) {
     const started = Date.now();
     try {
@@ -274,9 +370,15 @@ export async function generateImage(args: GenerateImageArgs): Promise<GeneratedI
       });
       return { ...entry, bytes: raw.bytes, cached: false };
     } catch (err) {
+      // Storage misconfiguration isn't the provider's fault and every other
+      // provider would hit it too, so surface it as-is.
+      if (err instanceof StorageConfigError) throw err;
       const msg = err instanceof Error ? err.message : String(err);
-      failures.push({ provider, error: msg });
-      if (process.env.LLM_DEBUG) console.error(`[image debug] ${provider} failed:`, msg);
+      const kind: ImageFailureKind = err instanceof ImageProviderError ? err.kind : "failed";
+      const failure: ImageFailure = { provider, kind, error: msg };
+      failures.push(failure);
+      // Config errors always log, so a bad env never falls through silently.
+      if (kind === "config" || process.env.LLM_DEBUG) console.error(`[image] ${describeFailure(failure)}`);
       await logAiCall({
         provider,
         model: "unknown",

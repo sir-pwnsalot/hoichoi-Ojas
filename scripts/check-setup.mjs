@@ -91,8 +91,8 @@ if (env.CLOUDFLARE_API_TOKEN) {
   const r = await get("https://api.cloudflare.com/client/v4/user/tokens/verify", { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` });
   r.json?.result?.status === "active" ? ok("Cloudflare token active") : bad(`Cloudflare token check failed: ${r.status}`);
   if (env.CLOUDFLARE_ACCOUNT_ID && env.CF_IMAGE_MODEL) {
-    const q = await get(`https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/models/search?search=flux`, { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` });
-    q.json ? (q.json.result.some((m) => m.name === env.CF_IMAGE_MODEL) ? ok(`Workers AI can see ${env.CF_IMAGE_MODEL}`) : bad(`Workers AI model '${env.CF_IMAGE_MODEL}' not found`))
+    const q = await get(`https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/models/search?task=Text-to-Image`, { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` });
+    q.json ? (q.json.result.some((m) => m.name === env.CF_IMAGE_MODEL) ? (env.CF_IMAGE_MODEL.includes("flux-1-schnell") ? bad(`${env.CF_IMAGE_MODEL} only outputs 1:1; set CF_IMAGE_MODEL=@cf/lykon/dreamshaper-8-lcm`) : ok(`Workers AI can see ${env.CF_IMAGE_MODEL}`)) : bad(`Workers AI model '${env.CF_IMAGE_MODEL}' not found`))
       : bad(`Workers AI access failed (${q.status}), check the token has Workers AI permission and the Account ID`);
   }
 }

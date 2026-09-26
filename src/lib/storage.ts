@@ -3,10 +3,24 @@ import path from "node:path";
 import { get, put } from "@vercel/blob";
 
 // Asset storage: Vercel Blob when BLOB_READ_WRITE_TOKEN is set, otherwise
-// public/uploads (dev). URLs returned are either absolute blob URLs or
-// site-relative "/uploads/..." paths.
+// public/uploads (dev only). URLs returned are either absolute blob URLs or
+// site-relative "/uploads/..." paths. On Vercel the function filesystem is
+// read-only (except /tmp), so a missing Blob token there is a config error,
+// never a local write.
 
 const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
+
+export class StorageConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StorageConfigError";
+  }
+}
+
+// Local-disk writes are allowed only outside Vercel / production builds.
+export function localWritesAllowed(): boolean {
+  return !process.env.VERCEL && process.env.NODE_ENV !== "production";
+}
 
 function blobEnabled(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
@@ -32,6 +46,11 @@ export async function putObject(pathname: string, bytes: Uint8Array, contentType
       allowOverwrite: true,
     });
     return res.url;
+  }
+  if (!localWritesAllowed()) {
+    throw new StorageConfigError(
+      "BLOB_READ_WRITE_TOKEN missing in production: refusing to write to public/uploads (read-only filesystem). Connect a Vercel Blob store to this project.",
+    );
   }
   const file = path.join(UPLOADS_DIR, ...key.split("/"));
   await mkdir(path.dirname(file), { recursive: true });

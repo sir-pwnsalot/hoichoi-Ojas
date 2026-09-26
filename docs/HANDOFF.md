@@ -239,3 +239,7 @@ Done: Vercel build failed prerendering /analytics (DB read at build time). Read 
 Needs (Antigravity):
 - [ ] src/app/analytics/page.tsx + src/app/review/page.tsx: `listConcepts("brief-mock")` / `getComparison("brief-mock")`
       match nothing — call with no briefId (all concepts) or a real one, or the pages stay empty.
+
+### 2026-09-26 · Claude Code · prod image fix
+- Done: CF_IMAGE_MODEL default → `@cf/lykon/dreamshaper-8-lcm` (flux-1-schnell is 1:1 only, now a labelled CONFIG ERROR). SD models' raw image/png responses now parsed. Dims fitted per model (`fitToModel`). Failures labelled RATE LIMITED / CONFIG ERROR / FAILED. `putObject` refuses local writes on Vercel/production without BLOB_READ_WRITE_TOKEN.
+- Needs (🧑): set CF_IMAGE_MODEL in .env.local + Vercel; connect a Blob store to the Vercel project so BLOB_READ_WRITE_TOKEN exists in prod.
