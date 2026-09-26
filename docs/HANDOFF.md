@@ -14,13 +14,12 @@ Done:
 - src/lib/ai/llm.ts skeleton (generateJSON, provider chain by purpose, ai_calls ledger, BudgetExceededError). Provider calls themselves are still TODO(M1).
 - vitest.config.ts added.
 
+Done (Claude Code, follow-up):
+- [x] Fixed the `import { cn } from "cn"` → `import { cn } from "@/lib/utils"` typo across all 14
+      `src/components/ui/*.tsx` files above (this was breaking the Vercel build's `tsc` step with
+      `TS2307: Cannot find module 'cn'`). `npm run typecheck` is clean now.
+
 Needs (Antigravity):
-- [ ] `src/components/ui/*.tsx` (button, badge, card, checkbox, dialog, input, label, select, separator,
-      skeleton, table, tabs, textarea, tooltip) all do `import { cn } from "cn"` — that package doesn't
-      export a `cn` function (it's a CLI tool pulled in transitively by `shadcn`, not a real dependency).
-      I fixed `src/lib/utils.ts` to implement `cn` locally via `clsx` (already a dependency), so these
-      files just need `import { cn } from "cn"` → `import { cn } from "@/lib/utils"`. Currently the only
-      `npm run typecheck` failures are these 14 files.
 - [ ] M0's last box (deploy empty app to Vercel with Turso + Blob env vars) is still open — not part of
       this session's scope.
 
