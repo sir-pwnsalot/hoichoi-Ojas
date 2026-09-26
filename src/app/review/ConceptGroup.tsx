@@ -4,12 +4,12 @@ import { AlertCircle, Info, PlayCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
-export function ConceptGroup({ 
-  concept, 
+export function ConceptGroup({
+  concept,
   variants,
   onUpdateVariant,
-  onReplaceVariant 
-}: { 
+  onReplaceVariant
+}: {
   concept: Concept;
   variants: Variant[];
   onUpdateVariant: (v: Variant) => void;
@@ -31,17 +31,17 @@ export function ConceptGroup({
           <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
             Concept: {concept.name}
           </h2>
-          <Button 
+          <Button
             onClick={handleRenderAll}
-            size="sm" 
-            variant="outline" 
+            size="sm"
+            variant="outline"
             className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-100"
           >
             <PlayCircle className="w-4 h-4 mr-2" />
             Render all
           </Button>
         </div>
-        
+
         <div className="mt-4 bg-zinc-900 border border-zinc-800 rounded p-3 text-sm flex gap-3">
           <Info className="w-5 h-5 text-blue-500 shrink-0" />
           <div className="flex-1">
@@ -54,11 +54,11 @@ export function ConceptGroup({
           </div>
         </div>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {variants.map(variant => (
-          <VariantCard 
-            key={variant.id} 
+          <VariantCard
+            key={variant.id}
             variant={variant}
             onUpdate={onUpdateVariant}
             onReplace={(newVariant) => onReplaceVariant(variant.id, newVariant)}
