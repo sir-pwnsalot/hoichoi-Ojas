@@ -10,14 +10,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "check:setup": "node --env-file=.env.local scripts/check-setup.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@libsql/client": "^0.18.0",
     "@vercel/blob": "^2.8.0",
     "class-variance-authority": "^0.7.1",
-    "cn": "^0.4.0",
     "drizzle-orm": "^0.45.3",
     "image-size": "^2.0.4",
     "lucide-react": "^1.48.0",
@@ -34,12 +34,17 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22.20.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/twitter-text": "^3.1.10",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.0.2"
   }
 }
