@@ -11,7 +11,10 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, CheckCircle, RefreshCcw, Edit2, CalendarClock, Shield, AlertTriangle, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle, RefreshCcw, Edit2, CalendarClock, Shield, AlertTriangle, AlertCircle, PlayCircle } from "lucide-react";
+import { CanvasComposer, type CanvasComposerRef } from "@/components/render/CanvasComposer";
+import { VideoComposer, type VideoComposerRef } from "@/components/render/VideoComposer";
+import { useRef, useEffect } from "react";
 
 export function VariantCard({ variant, onUpdate, onReplace }: { 
   variant: Variant; 
@@ -23,6 +26,41 @@ export function VariantCard({ variant, onUpdate, onReplace }: {
   const [editCaption, setEditCaption] = useState(variant.caption);
   const [discardNote, setDiscardNote] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
+  const [renderProgress, setRenderProgress] = useState(false);
+  
+  const canvasRef = useRef<CanvasComposerRef>(null);
+  const videoRef = useRef<VideoComposerRef>(null);
+
+  const handleRender = async () => {
+    setRenderProgress(true);
+    try {
+      let url = "";
+      if (variant.channel === "youtube") {
+        url = await videoRef.current!.renderAsset();
+      } else {
+        url = await canvasRef.current!.renderAsset();
+      }
+      onUpdate({ ...variant, assetUrl: url });
+      toast.success("Asset rendered!");
+    } catch (e: any) {
+      toast.error(e.message || "Render failed");
+    } finally {
+      setRenderProgress(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleRenderAllEvent = () => {
+      if (!variant.assetUrl && !renderProgress) {
+        handleRender();
+      }
+    };
+    
+    window.addEventListener(`render-all-${variant.conceptId}`, handleRenderAllEvent);
+    return () => {
+      window.removeEventListener(`render-all-${variant.conceptId}`, handleRenderAllEvent);
+    };
+  }, [variant.assetUrl, variant.conceptId, renderProgress]);
   
   const handleApprove = async () => {
     setLoading(true);
@@ -134,15 +172,31 @@ export function VariantCard({ variant, onUpdate, onReplace }: {
       
       <CardContent className="flex-1 space-y-4">
         {/* Asset Preview */}
-        <div className="bg-black rounded border border-zinc-800 aspect-video flex items-center justify-center relative overflow-hidden group">
+        <div className="bg-black rounded border border-zinc-800 aspect-video flex flex-col items-center justify-center relative overflow-hidden group">
           {variant.assetUrl ? (
-            <img src={variant.assetUrl} alt="Preview" className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity" />
+            variant.channel === "youtube" ? (
+              <video src={variant.assetUrl} autoPlay loop muted className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity" />
+            ) : (
+              <img src={variant.assetUrl} alt="Preview" className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity" />
+            )
           ) : (
-            <div className="text-zinc-600 flex flex-col items-center">
-              <span className="text-sm">No Asset Generated</span>
-              <span className="text-xs mt-1">Prompt: {variant.imagePrompt.slice(0, 40)}...</span>
+            <div className="text-zinc-600 flex flex-col items-center p-4 text-center">
+              <span className="text-sm mb-2">No Asset Generated</span>
+              <span className="text-xs mt-1 mb-4">Prompt: {variant.imagePrompt.slice(0, 40)}...</span>
+              <Button size="sm" onClick={handleRender} disabled={renderProgress} className="bg-blue-600 hover:bg-blue-700 text-white z-10">
+                {renderProgress ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PlayCircle className="w-4 h-4 mr-2" />}
+                Render Asset
+              </Button>
             </div>
           )}
+          {/* Composers (hidden rendering engines) */}
+          <div className="absolute inset-0 pointer-events-none opacity-0 flex items-center justify-center">
+            {variant.channel === "youtube" ? (
+              <VideoComposer ref={videoRef} variant={variant} />
+            ) : (
+              <CanvasComposer ref={canvasRef} variant={variant} />
+            )}
+          </div>
         </div>
 
         {/* Copy */}

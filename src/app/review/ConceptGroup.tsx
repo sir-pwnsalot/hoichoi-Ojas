@@ -1,6 +1,8 @@
 import type { Concept, Variant } from "@/lib/types";
 import { VariantCard } from "./VariantCard";
-import { AlertCircle, Info } from "lucide-react";
+import { AlertCircle, Info, PlayCircle, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export function ConceptGroup({ 
   concept, 
@@ -13,12 +15,32 @@ export function ConceptGroup({
   onUpdateVariant: (v: Variant) => void;
   onReplaceVariant: (oldId: string, newVariant: Variant) => void;
 }) {
+  const [isRenderingAll, setIsRenderingAll] = useState(false);
+
+  const handleRenderAll = () => {
+    // We can simulate clicks on all "Render Asset" buttons or pass a prop
+    // The easiest way is to dispatch a custom event or let the user click them
+    // But since state is in VariantCard, we'll just broadcast an event
+    window.dispatchEvent(new CustomEvent(`render-all-${concept.id}`));
+  };
+
   return (
     <div className="space-y-6">
       <div className="border-b border-zinc-800 pb-4">
-        <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
-          Concept: {concept.name}
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+            Concept: {concept.name}
+          </h2>
+          <Button 
+            onClick={handleRenderAll}
+            size="sm" 
+            variant="outline" 
+            className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-100"
+          >
+            <PlayCircle className="w-4 h-4 mr-2" />
+            Render all
+          </Button>
+        </div>
         
         <div className="mt-4 bg-zinc-900 border border-zinc-800 rounded p-3 text-sm flex gap-3">
           <Info className="w-5 h-5 text-blue-500 shrink-0" />
