@@ -1,6 +1,8 @@
 import { listInsights } from "@/lib/actions";
 import { StudioClient } from "./StudioClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function StudioPage() {
   const insights = await listInsights();
   
